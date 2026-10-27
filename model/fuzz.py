@@ -1,32 +1,57 @@
-"""Random adversarial histories, checked against properties the rules must
-keep whatever happens.
+"""Random histories, checked against properties the rules must keep
+whatever happens.
 
-    python3 model/fuzz.py [identity-cases] [space-cases] [seed] [web-cases]
+    python3 model/fuzz.py [identity-cases] [space-cases] [seed] [web-cases] [honest-cases]
+    python3 model/fuzz.py --digest [cases] [seed]
 
 Identity histories mix honest work with a thief who steals the phrase or a
 device and writes with old parents, guardians who confirm late, twice, from
-stolen devices, or under replaced policies, and recoveries under any policy.
+stolen devices, or under replaced policies, recoveries under any policy,
+keys added twice at different powers, thresholds that are not a majority,
+decisions with extra ops, and policies without guardians and their
+controllers.
+Honest identity histories have an owner whose devices may be partitioned
+from each other, guardians whose software follows the chain rule
+(world.may_confirm) with partial views of each other's confirmations, and
+thieves who steal devices, admins, or the phrase and write anything.
 Guardian webs are worlds of identities that guard each other (a pair with a
 third guardian, a three-cycle, a mesh of four), where any of them may be
 stolen from, contested, recovering or frozen while it confirms another's
 decisions, and thieves confirm with stolen or freshly minted keys on old
 branches of a guardian's log.
-Space histories mix members adding, removing, lowering, leaving and
-succeeding, devices removed in identity logs, keep ops, and backdated writes
-under ended memberships.
+Space histories have an honest owner whose keys are never stolen, members
+adding, removing, lowering, leaving and succeeding, thieves holding other
+members' keys who write under any membership with old parents (ending
+others' memberships, succeeding, adding), a stranger who was never a
+member, devices removed in identity logs, keep ops, and a frozen member.
 
 Properties checked:
 
-  D  determinism: the result is the same however the entries are ordered;
-  M  monotone decisions: for a causally closed subset S1 of S, if S1 is
-     frozen so is S, and a decision in effect in S1 is in effect in S or S
-     is frozen;
+  D  determinism: the result is the same however the entries are ordered,
+     and under different Python hash seeds (run in subprocesses);
+  M  monotone: for a causally closed subset S1 of S, if S1 is frozen so is
+     S, and a decision in effect in S1 is in effect in S or S is frozen; in
+     spaces, an entry whose signature counts in S1 counts in S;
   R  recovery: if S is not frozen, every key in effect was kept by the
      latest recovery or added after it, and every root descends from it;
   B  backdating: no valid entry by a removed key is outside the removal's
      causal past; no valid space entry descends from the end of its
      membership;
-  A  authors: every valid space entry has an author whose key counted.
+  A  authors: every valid space entry has an author whose key counted;
+  H  honest guardians: guardians following the chain rule, with an honest
+     owner, never cause a freeze, whatever thieves do;
+  O  honest owner: an owner whose keys are not stolen keeps its membership
+     and every entry it wrote, in the whole and in every closed subset;
+  P  power: every removal in effect goes strictly down in power, except a
+     root replacing itself and a recovery;
+  K  a key removed by a recovery gains nothing: every valid entry it signed
+     is in the recovery's causal past, and no decision it signed descending
+     from the recovery is in effect;
+  E  equal or lower: removing every space entry by one identity never makes
+     valid an entry under a membership of equal or higher role than any it
+     held, and a non-member's entries never matter at all;
+  F  freezing keeps what others built on: every entry by an author who is
+     not frozen that is valid when no one is treated as frozen is valid.
 
 For guardian webs, D also covers the order in which identities are
 evaluated, and every evaluation must terminate without the same evaluation
@@ -40,7 +65,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from datalog import check  # noqa: E402
 from world import (Builder, Entry, World, PROGRAMS, ancestry, evaluate_identity,  # noqa: E402
-                   evaluate_space)
+                   evaluate_space, may_confirm)
 
 
 class Failure(Exception):
@@ -111,9 +136,32 @@ def identity_history(rng):
     def policies():
         return [x for x in ilog() if any(op[0] == "policy" for op in b.w.entries[x].ops)]
 
+    if guarded and rng.random() < 0.2:
+        # the old phrase is stolen; guardians recover; later the guardians
+        # agree to drop themselves, and the thief, holding the removed root,
+        # acts on the policy without guardians
+        thief.add("R0")
+        rec = b.write("I", nid("r"), "N0", [("recover", "N0", ("A0",), "I")], ["I"])
+        for g in gs[:2]:
+            b.write(g, nid("c"), "a" + g, [("confirm", rec)])
+        owner["root"] = "N0"
+        op = ("policy", "I", (), 0) + (("N0",) if rng.random() < 0.7 else ())
+        drop = b.write("I", nid("s"), "N0", [op])
+        for g in gs[:2]:
+            b.write(g, nid("c"), "a" + g, [("confirm", drop)])
+        x = b.write("I", nid("t"), "R0", [("policy", drop, gs, 2)],
+                    rng.choice([[drop], b.heads("I")]))
+        thief_entries.add(x)
+
     for _ in range(rng.randint(6, 20)):
         a = rng.random()
         if a < 0.08:                                   # owner adds a device
+            if rng.random() < 0.15:                    # or names a key a second time
+                k = rng.choice(owner["devices"] + [owner["admin"]])
+                b.write("I", nid("e"), owner["root"] if rng.random() < 0.5 else owner["admin"],
+                        [("add", k, rng.choice([1, 2]))],
+                        honest_parents() if rng.random() < 0.6 else old_parents())
+                continue
             d = nid("D")
             owner["devices"].append(d)
             b.write("I", nid("e"), owner["admin"], [("add", d, 1)], honest_parents())
@@ -128,11 +176,25 @@ def identity_history(rng):
         elif a < 0.26:                                 # owner changes guardians
             pol = rng.choice(policies())
             new = tuple(rng.sample(gs, rng.randint(0, 3)))
+            t = len(new) // 2 + 1 if new else 0
+            if new and rng.random() < 0.15:            # a threshold that is no majority
+                t = rng.choice([0, len(new) // 2, len(new) + 1])
+            op = ("policy", pol, new, t)
+            if not new and rng.random() < 0.8:         # names the root that controls it
+                op += (owner["root"],)
             b.write("I", nid("s"), owner["root"] if rng.random() < 0.5 else owner["admin"],
-                    [("policy", pol, new, len(new) // 2 + 1 if new else 0)], honest_parents())
-        elif a < 0.32:                                 # something is stolen
+                    [op], honest_parents())
+        elif a < 0.29:                                 # something is stolen
             thief.add(rng.choice(["R0", "R0", owner["root"], owner["admin"],
                                   rng.choice(owner["devices"])]))
+        elif a < 0.32:                                 # an admin removes an admin
+            if "A1" not in owner["devices"] and rng.random() < 0.5:
+                b.write("I", nid("e"), owner["admin"], [("add", "A1", 2)], honest_parents())
+                owner["devices"].append("A1")
+            else:
+                k = rng.choice(sorted(thief | {owner["admin"]}))
+                b.write("I", nid("t"), k, [("rem", rng.choice(["A0", "A1"]))],
+                        old_parents() if rng.random() < 0.5 else b.heads("I"))
         elif a < 0.52 and thief:                       # the thief writes, backdated
             k = rng.choice(sorted(thief))
             x = nid("t")
@@ -147,9 +209,15 @@ def identity_history(rng):
                 t = nid("K")
                 thief.add(t)
                 ops = [("add", t, rng.choice([1, 2]))]
-            elif kind < 0.85:
+            elif kind < 0.78:
                 pol = rng.choice(policies())
                 ops = [("policy", pol, ("X1", "X2", "X3"), 2)]
+            elif kind < 0.85:                          # drop guardians, controlling it
+                pol = rng.choice(policies())
+                ops = [("policy", pol, (), 0, k)]
+            elif kind < 0.92:                          # name a key again, at another power
+                ops = [("add", rng.choice([owner["admin"]] + owner["devices"] + sorted(thief)),
+                        rng.choice([1, 2]))]
             else:
                 ops = [("sek",)]
             b.write("I", x, k, ops, old_parents() if rng.random() < 0.7 else b.heads("I"))
@@ -159,7 +227,10 @@ def identity_history(rng):
             keep = tuple(k for k in [owner["admin"]] + owner["devices"] if rng.random() < 0.5)
             pol = rng.choice(policies())
             par = honest_parents() if rng.random() < 0.7 else old_parents()
-            b.write("I", nid("r"), nroot, [("recover", nroot, keep, pol)], par)
+            ops = [("recover", nroot, keep, pol)]
+            if rng.random() < 0.1:                     # a decision with company
+                ops.append(rng.choice([("add", nid("K"), 1), ("recover", nid("N"), (), pol)]))
+            b.write("I", nid("r"), nroot, ops, par)
             if rng.random() < 0.6:
                 owner["root"] = nroot
         elif a < 0.92 and decisions():                 # a guardian confirms
@@ -202,6 +273,42 @@ def identity_props(w, ident, r, stats):
             need(ok, "R", f"root {root} does not descend from recovery {d}")
         stats["recovered"] += 1
 
+    # P: removals in effect go strictly down
+    kpow = dict(r["kpow"])
+    rec_entries = {x for x, e in w.entries.items()
+                   if e.log == ident and any(op[0] == "recover" for op in e.ops)}
+    for (k, y) in r["removal"]:
+        if y in rec_entries:
+            continue
+        s = w.entries[y].signer
+        need(kpow.get(s, 0) > kpow.get(k, 9), "P",
+             f"{y} by {s} (power {kpow.get(s)}) removes {k} (power {kpow.get(k)})")
+    for (x,) in r["valid"]:
+        e = w.entries[x]
+        for op in e.ops:
+            if op[0] == "rem" and op[1] != e.signer and op[1] in kpow:
+                need(kpow.get(e.signer, 0) > kpow[op[1]], "P",
+                     f"valid {x} by {e.signer} removes {op[1]} of equal or higher power")
+
+    # K: a key removed by a recovery gains nothing
+    applied = {d for (d,) in r["applied"]}
+    for (d, k) in r["rec_removes"]:
+        if d not in applied:
+            continue
+        for (x,) in r["valid"]:
+            if w.entries[x].signer == k:
+                need(ae(x, d), "K", f"{x} by {k}, removed by {d}, is valid outside its past")
+        if not r["frozen"]:
+            # a change under a policy with guardians is only proposed by its
+            # signer; the guardians decide it. Any other decision counts.
+            guarded = {x for (x,) in r["in_effect"] if any(
+                op[0] == "policy" and op[1] is not None and w.entries[op[1]].ops and any(
+                    o[0] == "policy" and o[2] for o in w.entries[op[1]].ops)
+                for op in w.entries[x].ops)}
+            for (x,) in r["in_effect"]:
+                if w.entries[x].signer == k and ae(d, x) and x != d and x not in guarded:
+                    need(False, "K", f"decision {x} by {k}, removed by {d}, is in effect")
+
     # B
     removals = {}
     for (k, h) in r["removed_at"]:
@@ -239,6 +346,153 @@ def check_identity(b, rng, stats):
     stats["frozen"] += r["frozen"]
     stats["contested"] += r["contested"]
     stats["entries"] += len(w.entries)
+
+
+# ------------------------------------------------------------ honest guardians
+
+def honest_identity_history(rng):
+    """An honest owner, guardians whose software follows the chain rule, and
+    thieves. The owner's devices may not see each other's latest entries, so
+    the owner can propose decisions concurrently. Guardians see a random part
+    of each other's confirmations, and all of their own."""
+    b = Builder()
+    n = rng.choice([3, 4, 5])
+    gs = tuple(f"G{i}" for i in range(1, n + 1))
+    for g in gs:
+        b.identity(g, "r" + g, admin="a" + g, devices=("d" + g,))
+    b.identity("I", "R0", admin="A0", devices=("D0",), guardians=gs, threshold=n // 2 + 1)
+    owner = {"roots": ["R0"], "admin": "A0", "devices": ["D0"]}
+    thief, bad, mine = set(), set(), []
+    k = [0]
+
+    def nid(p):
+        k[0] += 1
+        return f"{p}{k[0]:03d}"
+
+    def ilog():
+        return [x for x, e in b.w.entries.items() if e.log == "I"]
+
+    def honest(partial=True):
+        view = [x for x in ilog() if x not in bad]
+        if partial and rng.random() < 0.4:             # a device that is behind
+            view = [x for x in view if rng.random() < 0.6]
+        return b.w.closure(view + ["I"])
+
+    def parents(within):
+        return b.heads("I", within=within)
+
+    def current_root():
+        r = b.ident("I", honest(partial=False) | frozenset(
+            x for x, e in b.w.entries.items() if e.log != "I"))
+        live = [x for (x,) in r["root_eff"] if x in owner["roots"]]
+        return rng.choice(sorted(live)) if live else None
+
+    def current_policy(view):
+        r = b.ident("I", view | frozenset(x for x, e in b.w.entries.items() if e.log != "I"))
+        ps = sorted(p for (p,) in r["current_policy"])
+        return rng.choice(ps) if ps else "I"
+
+    for _ in range(rng.randint(8, 24)):
+        a = rng.random()
+        if a < 0.08:                                   # owner adds a device
+            d = nid("D")
+            owner["devices"].append(d)
+            b.write("I", nid("e"), owner["admin"], [("add", d, 1)], parents(honest()))
+        elif a < 0.12:                                 # owner removes a device
+            d = rng.choice(owner["devices"])
+            b.write("I", nid("e"), owner["admin"], [("rem", d)], parents(honest()))
+        elif a < 0.16:                                 # owner replaces the root
+            r = current_root()
+            if r:
+                nr = nid("R")
+                b.write("I", nid("e"), r, [("add", nr, 3), ("rem", r)],
+                        parents(honest(partial=False)))
+                owner["roots"].append(nr)
+        elif a < 0.26:                                 # owner proposes new guardians
+            view = honest()
+            new = tuple(sorted(rng.sample(gs, rng.randint(1, n))))
+            x = nid("s")
+            b.write("I", x, rng.choice([owner["admin"]] + owner["devices"]),
+                    [("policy", current_policy(view), new, len(new) // 2 + 1)], parents(view))
+            mine.append(x)
+        elif a < 0.38:                                 # owner asks for a recovery
+            view = honest()
+            pol = current_policy(view)
+            if rng.random() < 0.5:
+                # leave out changes of that policy that are not yet approved
+                r = b.ident("I", view | frozenset(
+                    x for x, e in b.w.entries.items() if e.log != "I"))
+                approved = {d for (d,) in r["in_effect"]}
+                pending = [x for x in view if x not in approved and any(
+                    op[0] == "policy" and op[1] == pol for op in b.w.entries[x].ops)]
+                anc = anc_of(b.w, "I")
+                view = frozenset(x for x in view if not any(
+                    p == x or p in anc[x] for p in pending))
+            nroot = nid("N")
+            keep = tuple(kk for kk in [owner["admin"]] + owner["devices"] if rng.random() < 0.5)
+            x = nid("r")
+            b.write("I", x, nroot, [("recover", nroot, keep, pol)], parents(view))
+            mine.append(x)
+            owner["roots"].append(nroot)
+        elif a < 0.44:                                 # something is stolen
+            thief.add(rng.choice(["R0", owner["admin"], rng.choice(owner["devices"])]
+                                 + owner["roots"][-1:]))
+        elif a < 0.58 and thief:                       # the thief writes anything
+            kk = rng.choice(sorted(thief))
+            c = rng.random()
+            pol = rng.choice([x for x in ilog() if any(
+                op[0] == "policy" for op in b.w.entries[x].ops)])
+            if c < 0.25:
+                t = nid("T")
+                thief.add(t)
+                ops = [("add", t, 3), ("rem", kk)]
+            elif c < 0.45:
+                t = nid("K")
+                thief.add(t)
+                ops = [("add", t, rng.choice([1, 2]))]
+            elif c < 0.6:
+                ops = [("rem", rng.choice([owner["admin"]] + owner["devices"]))]
+            elif c < 0.75:
+                ops = [("policy", pol, gs[:1], 1)]
+            elif c < 0.9:
+                t = nid("T")
+                thief.add(t)
+                b.write("I", nid("t"), t, [("recover", t, (), pol)],
+                        rng.choice([[rng.choice(ilog())], b.heads("I")]))
+                continue
+            else:
+                ops = [("sek",)]
+            x = nid("t")
+            b.write("I", x, kk, ops, [rng.choice(ilog())] if rng.random() < 0.7 else b.heads("I"))
+            bad.add(x)
+        elif mine:                                     # a guardian considers a decision
+            g = rng.choice(gs)
+            d = rng.choice(mine[-4:] if rng.random() < 0.7 else mine)
+            view = b.w.closure([x for x in b.w.entries if rng.random() < 0.6]
+                               + [x for x, e in b.w.entries.items() if e.log == g])
+            if may_confirm(b.w, view, g, d):
+                b.write(g, nid("c"), rng.choice(["a" + g, "d" + g]), [("confirm", d)],
+                        b.heads(g))
+    return b
+
+
+def check_honest(b, rng, stats):
+    w = b.w
+    r = evaluate_identity(w, "I", frozenset(w.entries))
+    need(not r["frozen"], "H", "guardians following the chain rule froze the identity")
+    w2 = reorder(w, rng)
+    r2 = evaluate_identity(w2, "I", frozenset(w2.entries))
+    for k in ("valid", "in_effect", "effective", "root_eff", "current_key", "frozen", "contested"):
+        need(r[k] == r2[k], "D", f"{k} differs with entry order")
+    s1 = closed_subset(w, rng, ["I"])
+    r1 = evaluate_identity(w, "I", s1)
+    need(not r1["frozen"], "H", "frozen in a subset")
+    for (d,) in r1["in_effect"]:
+        need((d,) in r["in_effect"], "M", f"{d} in effect in a subset only")
+    identity_props(w, "I", r, stats)
+    stats["entries"] += len(w.entries)
+    stats["decided"] += len(r["in_effect"])
+    stats["contested"] += r["contested"]
 
 
 # ------------------------------------------------------------ guardian webs
@@ -469,16 +723,22 @@ def check_guardian_web(b, names, rng, stats):
 
 # ------------------------------------------------------------ spaces
 
+PEOPLE = ("Ana", "Ben", "Cy", "Dee", "Eve")       # Eve is never added
+
+
 def space_history(rng):
+    """Ana is an honest owner whose keys are never stolen."""
     b = Builder()
-    people = ("Ana", "Ben", "Cy", "Dee")
-    for p in people:
+    for p in PEOPLE:
         b.identity(p, "r" + p, admin="a" + p, devices=("p" + p, "q" + p))
-    if rng.random() < 0.2:                          # someone becomes frozen
-        b.write("Dee", "dee1", "rDee", [("add", "rDee1", 3), ("rem", "rDee")])
-        b.write("Dee", "dee2", "rDee", [("add", "rDee2", 3), ("rem", "rDee")], parents=["Dee"])
-    keys = {p: ["a" + p, "p" + p, "q" + p] for p in people}
+    if rng.random() < 0.35:                         # Dee becomes frozen, later
+        late_freeze = True
+    else:
+        late_freeze = False
+    keys = {p: ["a" + p, "p" + p, "q" + p] for p in PEOPLE}
+    stolen = []
     n = [0]
+    info = {"ana": ["S"]}
 
     def nid(p):
         n[0] += 1
@@ -487,35 +747,104 @@ def space_history(rng):
     def ilog(p):
         return [x for x, e in b.w.entries.items() if e.log == p]
 
+    def slog():
+        return [x for x, e in b.w.entries.items() if e.log == "S"]
+
     owner = b.space("S", "Ana", "aAna")
     mems = [(owner, "Ana", 3)]
+    if late_freeze:                                 # Dee adds people before freezing
+        r = rng.choice([2, 3])
+        b.swrite("S", "dee", "Ana", "aAna", owner, [("add_member", "Dee", r)])
+        mems.append(("dee#0", "Dee", r))
+        info["ana"].append("dee")
+        b.swrite("S", "deeadd", "Dee", "pDee", "dee#0", [("add_member", "Cy", 1)])
+        mems.append(("deeadd#0", "Cy", 1))
+        if rng.random() < 0.7:
+            b.swrite("S", "cyw", "Cy", "pCy", "deeadd#0", [("app",)])
 
-    for _ in range(rng.randint(4, 18)):
+    steps = rng.randint(6, 22)
+    for step in range(steps):
+        if late_freeze and step == steps // 2:
+            b.write("Dee", "dee1", "rDee", [("add", "rDee1", 3), ("rem", "rDee")])
+            b.write("Dee", "dee2", "rDee", [("add", "rDee2", 3), ("rem", "rDee")],
+                    parents=["Dee"])
         a = rng.random()
-        if a < 0.12:                                   # a device is removed
-            p = rng.choice(people)
+        others = [m for m in mems if m[1] != "Ana"]
+        if a < 0.08:                                   # a device is removed
+            p = rng.choice(PEOPLE[1:])
             k = rng.choice(keys[p][1:])
             par = b.heads(p) if rng.random() < 0.6 else [rng.choice(ilog(p))]
             b.write(p, nid("i"), "a" + p, [("rem", k)], par)
             continue
-        i, who, role = rng.choice(mems)
+        if a < 0.14:                                   # a key of someone else is stolen
+            p = rng.choice(PEOPLE[1:])
+            stolen.append((p, rng.choice(keys[p])))
+            continue
+        x = nid("x")
+        if a < 0.38:                                   # Ana, honestly
+            c = rng.random()
+            lower = [m for m in mems if m[1] != "Ana" and m[2] < 3]
+            if c < 0.3:
+                ops = [("add_member", rng.choice(PEOPLE[1:4]), rng.randint(0, 3))]
+            elif c < 0.42 and lower:
+                ops = [("remove_member", rng.choice(lower)[0])]
+            elif c < 0.52 and [m for m in lower if m[2] > 0]:
+                t = rng.choice([m for m in lower if m[2] > 0])
+                ops = [("remove_member", t[0]), ("add_member", t[1], t[2] - 1)]
+            elif c < 0.6:
+                ops = [("reach",)]
+            else:
+                ops = [("app",)]
+            for i, op in enumerate(ops):
+                if op[0] == "add_member":
+                    mems.append((f"{x}#{i}", op[1], op[2]))
+            b.swrite("S", x, "Ana", rng.choice(keys["Ana"]), owner, ops, b.heads("S"),
+                     head=b.heads("Ana")[-1])
+            info["ana"].append(x)
+            continue
+        if a < 0.52 and stolen:                        # a thief, as the key's owner
+            p, k = rng.choice(stolen)
+            target = rng.choice(mems)
+            i = rng.choice([target[0]] + [m[0] for m in mems if m[1] == p])
+            c = rng.random()
+            if c < 0.3:
+                ops = [("remove_member", rng.choice(mems)[0])]
+            elif c < 0.45:
+                ops = [("succeed",)]
+            elif c < 0.6:
+                ops = [("add_member", rng.choice(PEOPLE), rng.randint(0, 3))]
+                mems.append((f"{x}#0", ops[0][1], ops[0][2]))
+            else:
+                ops = [("app",)]
+            par = [rng.choice(slog())] if rng.random() < 0.7 else b.heads("S")
+            b.swrite("S", x, p, k, i, ops, par, head=rng.choice(ilog(p)))
+            continue
+        if a < 0.58:                                   # a stranger
+            i = rng.choice([m[0] for m in mems] + ["S#9"])
+            ops = rng.choice([[("remove_member", rng.choice(mems)[0])], [("succeed",)],
+                              [("app",)], [("add_member", "Eve", 3)]])
+            par = [rng.choice(slog())] if rng.random() < 0.5 else b.heads("S")
+            b.swrite("S", x, "Eve", rng.choice(keys["Eve"]), i, ops, par,
+                     head=b.heads("Eve")[-1])
+            continue
+        if not others:
+            continue
+        i, who, role = rng.choice(others)              # another member, any way
         signer = rng.choice(keys[who])
         head = rng.choice(ilog(who)) if rng.random() < 0.3 else b.heads(who)[-1]
-        slog = [x for x, e in b.w.entries.items() if e.log == "S"]
-        par = b.heads("S") if rng.random() < 0.7 else [rng.choice(slog)]
-        x = nid("x")
+        par = b.heads("S") if rng.random() < 0.7 else [rng.choice(slog())]
         c = rng.random()
         if c < 0.25:
-            m, r = rng.choice(people), rng.randint(0, 3)
+            m, r = rng.choice(PEOPLE[:4]), rng.randint(0, 3)
             ops = [("add_member", m, r)]
-            mems.append((f"{x}:{m}", m, r))
+            mems.append((f"{x}#0", m, r))
         elif c < 0.38:
             ops = [("remove_member", rng.choice(mems)[0])]
         elif c < 0.46:
             t = rng.choice(mems)
             if t[2] > 0:
                 ops = [("remove_member", t[0]), ("add_member", t[1], t[2] - 1)]
-                mems.append((f"{x}:{t[1]}", t[1], t[2] - 1))
+                mems.append((f"{x}#1", t[1], t[2] - 1))
             else:
                 ops = [("app",)]
         elif c < 0.52:
@@ -523,23 +852,41 @@ def space_history(rng):
         elif c < 0.56:
             ops = [("succeed",)]
         elif c < 0.64:
-            mine = [e for e in slog if b.w.entries[e].author == who]
+            mine = [e for e in slog() if b.w.entries[e].author == who]
             ops = [("keep", rng.choice(keys[who]), tuple(rng.sample(mine, min(2, len(mine)))))]
         elif c < 0.70:
             ops = [("reach",)]
         else:
             ops = [("app",)]
         b.swrite("S", x, who, signer, i, ops, par, head=head)
+    b.info = info
     return b
+
+
+def space_ids(w):
+    return [x for x, e in w.entries.items() if e.log == "S"]
+
+
+def membership_roles(w, valid):
+    """Role of every membership created by a valid entry (or by genesis)."""
+    out = {}
+    for x in space_ids(w):
+        e = w.entries[x]
+        for i, op in enumerate(e.ops):
+            if op[0] == "create":
+                out[f"{x}#{i}"] = (e.author, 3)
+            elif op[0] == "add_member" and (x,) in valid:
+                out[f"{x}#{i}"] = (op[1], op[2])
+    return out
 
 
 def check_space(b, rng, stats):
     w = b.w
-    r = evaluate_space(w, "S", [x for x, e in w.entries.items() if e.log == "S"])
+    r = evaluate_space(w, "S", space_ids(w))
 
     # D
     w2 = reorder(w, rng)
-    r2 = evaluate_space(w2, "S", [x for x, e in w2.entries.items() if e.log == "S"])
+    r2 = evaluate_space(w2, "S", space_ids(w2))
     for k in ("valid", "member", "author_ok"):
         need(r[k] == r2[k], "D", f"space {k} differs with entry order")
 
@@ -555,24 +902,113 @@ def check_space(b, rng, stats):
             need(y not in anc[x], "B", f"{x} is valid after the end of {i} at {y}")
         # A
         need((x,) in r["author_ok"], "A", f"{x} is valid without a counted author")
+
+    # O: Ana keeps her membership and everything she wrote
+    def honest_owner(res, ids):
+        need(("S#0",) in res["member"], "O", "the honest owner lost her membership")
+        for x in b.info["ana"]:
+            if x in ids:
+                need((x,) in res["valid"], "O", f"the honest owner's {x} is invalid")
+    honest_owner(r, set(space_ids(w)))
+
+    authors = sorted({w.entries[x].author for x in space_ids(w)})
+    frozen = {a for a in authors if evaluate_identity(w, a, frozenset(w.entries))["frozen"]}
+
+    # M: signatures of authors who are not frozen keep counting; the honest
+    # owner in a subset
+    sub = w.closure([x for x in space_ids(w) if rng.random() < 0.6] + ["S"])
+    r1 = evaluate_space(w, "S", sub)
+    for (x,) in r1["author_ok"]:
+        if w.entries[x].author not in frozen:
+            need((x,) in r["author_ok"], "M", f"{x} counts in a subset only")
+    honest_owner(r1, sub)
+    stats["subsets"] += 1
+
+    # E: voiding one identity's entries never revives an equal or higher one
+    roles = membership_roles(w, r["valid"])
+    for m in authors:
+        top = max([ro for (who, ro) in roles.values() if who == m], default=-1)
+        rm = evaluate_space(w, "S", space_ids(w), void={m}, kept=r["kept_frozen"])
+        for (x,) in rm["valid"]:
+            if (x,) in r["valid"] or w.entries[x].author == m:
+                continue
+            role = roles.get(w.entries[x].membership, (None, -1))[1]
+            if role < 0:
+                # created by an entry that is valid only without m's entries
+                role = membership_roles(w, rm["valid"]).get(w.entries[x].membership,
+                                                            (None, -1))[1]
+            need(role < top, "E",
+                 f"{m} (role {top}) invalidates {x} under a role-{role} membership")
+        stats["counterfactuals"] += 1
+
+    # F: freezing keeps what others built on
+    rf = evaluate_space(w, "S", space_ids(w), ignore_frozen=True)
+    for (x,) in rf["valid"]:
+        if w.entries[x].author not in frozen:
+            need((x,) in r["valid"], "F", f"{x} is invalid only because someone is frozen")
+    stats["space_frozen"] += bool(frozen)
+
     stats["space_valid"] += len(r["valid"])
-    stats["space_entries"] += sum(1 for e in w.entries.values() if e.log == "S")
+    stats["space_entries"] += len(space_ids(w))
+
+
+# ------------------------------------------------------------ digests
+
+def digest(n, seed):
+    """A digest of every result, for comparing runs under different hash
+    seeds."""
+    import hashlib
+    h = hashlib.sha256()
+
+    def put(res):
+        for k in sorted(res):
+            v = res[k]
+            h.update(repr((k, sorted(v) if isinstance(v, (set, frozenset)) else v)).encode())
+
+    for i in range(n):
+        rng = random.Random(seed * 1_000_003 + i)
+        b = identity_history(rng)
+        put(evaluate_identity(b.w, "I", frozenset(b.w.entries)))
+        rng = random.Random(seed * 2_000_003 + i)
+        b = space_history(rng)
+        put(evaluate_space(b.w, "S", space_ids(b.w)))
+        rng = random.Random(seed * 3_000_017 + i)
+        b, names = guardian_web(rng)
+        for x in names:
+            put(evaluate_identity(b.w, x, frozenset(b.w.entries)))
+    return h.hexdigest()
+
+
+def hash_seed_check(n, seed):
+    import subprocess
+    out = set()
+    for hs in ("0", "1", "4242"):
+        env = dict(os.environ, PYTHONHASHSEED=hs)
+        p = subprocess.run([sys.executable, os.path.abspath(__file__), "--digest", str(n),
+                            str(seed)], env=env, capture_output=True, text=True, check=True)
+        out.add(p.stdout.strip())
+    return len(out) == 1
 
 
 def main():
-    n_id = int(sys.argv[1]) if len(sys.argv) > 1 else 1000
-    n_sp = int(sys.argv[2]) if len(sys.argv) > 2 else 1000
+    if len(sys.argv) > 1 and sys.argv[1] == "--digest":
+        print(digest(int(sys.argv[2]), int(sys.argv[3])))
+        return 0
+    n_id = int(sys.argv[1]) if len(sys.argv) > 1 else 300
+    n_sp = int(sys.argv[2]) if len(sys.argv) > 2 else 300
     seed = int(sys.argv[3]) if len(sys.argv) > 3 else 1
-    n_web = int(sys.argv[4]) if len(sys.argv) > 4 else 500
+    n_web = int(sys.argv[4]) if len(sys.argv) > 4 else 150
+    n_hon = int(sys.argv[5]) if len(sys.argv) > 5 else 300
     for name in ("identity", "space"):
         errs = check(PROGRAMS[name])
         if errs:
             print(f"{name} rules are not stratified:", *errs, sep="\n  ")
             return 1
     stats = dict(entries=0, frozen=0, contested=0, recovered=0, subsets=0,
-                 space_entries=0, space_valid=0)
+                 space_entries=0, space_valid=0, space_frozen=0, counterfactuals=0)
     web = dict(entries=0, frozen=0, contested=0, recovered=0, subsets=0, depth=0,
                conf=0, conf_frozen=0, conf_contested=0, conf_recovering=0)
+    hon = dict(entries=0, recovered=0, decided=0, contested=0)
     failures = 0
     for i in range(n_id):
         rng = random.Random(seed * 1_000_003 + i)
@@ -582,6 +1018,14 @@ def main():
         except Failure as f:
             failures += 1
             print(f"identity case {i}: {f}")
+    for i in range(n_hon):
+        rng = random.Random(seed * 4_000_037 + i)
+        b = honest_identity_history(rng)
+        try:
+            check_honest(b, rng, hon)
+        except Failure as f:
+            failures += 1
+            print(f"honest case {i}: {f}")
     for i in range(n_sp):
         rng = random.Random(seed * 2_000_003 + i)
         b = space_history(rng)
@@ -598,17 +1042,26 @@ def main():
         except (Failure, AssertionError, RecursionError) as f:
             failures += 1
             print(f"guardian web case {i}: {type(f).__name__}: {f}")
+    same = hash_seed_check(20, seed)
+    if not same:
+        failures += 1
+        print("D: results differ between Python hash seeds")
     print(f"identity: {n_id} histories, {stats['entries']} entries, {stats['subsets']} subsets; "
           f"{stats['frozen']} frozen, {stats['contested']} contested, "
           f"{stats['recovered']} recovered")
+    print(f"honest guardians: {n_hon} histories, {hon['entries']} entries, "
+          f"{hon['decided']} decisions in effect, {hon['recovered']} recovered, "
+          f"{hon['contested']} contested, 0 frozen allowed")
     print(f"space: {n_sp} histories, {stats['space_entries']} entries, "
-          f"{stats['space_valid']} valid")
+          f"{stats['space_valid']} valid, {stats['counterfactuals']} counterfactuals, "
+          f"{stats['space_frozen']} with a frozen member")
     print(f"guardian webs: {n_web} worlds, {web['entries']} entries, {web['subsets']} subsets; "
           f"{web['frozen']} frozen, {web['contested']} contested, {web['recovered']} recovered "
           f"identities; deepest nesting {web['depth']}")
     print(f"  {web['conf']} confirmations, written while the guardian was frozen "
           f"{web['conf_frozen']}, contested {web['conf_contested']}, "
           f"recovered {web['conf_recovering']}")
+    print(f"hash seeds: {'same results' if same else 'DIFFERENT results'} under 3 seeds")
     print(f"{failures} failures")
     return 1 if failures else 0
 

@@ -7,8 +7,10 @@ gives each actor only the keys it holds.
 Identity log ops:
     ("add", K, power)            add_key; power 1 device, 2 admin, 3 root
     ("rem", K)                   remove_key
-    ("policy", P, guardians, t)  set_recovery; P is the policy it changes
-                                 (None in genesis)
+    ("policy", P, guardians, t[, controller])
+                                 set_recovery; P is the policy it changes
+                                 (None in genesis); controller is the root
+                                 that may change a policy naming no guardians
     ("recover", N, keeps, P)     recover: new root N, keys kept, under policy P
     ("confirm", D)               a guardian's confirmation of decision D
     ("sek",)                     set_encryption_key
@@ -17,7 +19,7 @@ Identity log ops:
 Space ops:
     ("create",)                  genesis; the author becomes an owner
     ("add_member", M, role)      role 0 reader .. 3 owner
-    ("remove_member", I)         I is a membership id
+    ("remove_member", I)         I is a membership id: "<entry id>#<op index>"
     ("succeed",)
     ("keep", K, entry ids)
     ("app",)                     application data; writers and up
@@ -46,8 +48,10 @@ class Entry:
     membership: str = None
 
 
-def membership_id(entry_id, identity):
-    return f"{entry_id}:{identity}"
+def membership_id(entry_id, index):
+    """A membership is named by the entry and the position of the op that
+    created it, as in spaces.md."""
+    return f"{entry_id}#{index}"
 
 
 class World:
@@ -132,7 +136,7 @@ def log_order(entries):
 
 def graph_facts(entries, prefix=""):
     anc = ancestry(entries)
-    ids = list(entries)
+    ids = sorted(entries)
     f = {prefix + k: set() for k in ("entry", "anc", "ae", "conc", "genesis")}
     for x in ids:
         f[prefix + "entry"].add((x,))
@@ -161,61 +165,77 @@ ALLOWED = {
 
 
 def identity_facts(world, ident, ids):
-    entries = {x: world.entries[x] for x in ids if world.entries[x].log == ident}
+    entries = {x: world.entries[x] for x in sorted(ids) if world.entries[x].log == ident}
     f, anc = graph_facts(entries)
     order = log_order(entries)
     pos = {x: n for n, x in enumerate(order)}
     f["later"] = {(a, b) for a in entries for b in entries if pos[a] < pos[b]}
-    for k in ("signer", "add", "rem", "selfrep", "is_selfrep", "badops", "policy",
-              "change", "guardian", "threshold", "unguarded", "recover", "keeps", "sek"):
+    for k in ("signer", "add", "readd", "rem", "selfrep", "is_selfrep", "badops", "policy",
+              "change", "guardian", "threshold", "unguarded", "majority", "bad_policy",
+              "ctrl", "recover", "keeps", "bad_decision", "sek"):
         f[k] = set()
-    power = {}
-    for e in entries.values():
-        for op in e.ops:
-            if op[0] == "add":
-                power.setdefault(op[1], op[2])
-            if op[0] == "recover":
-                power.setdefault(op[1], 3)
-    for x, e in entries.items():
+    # keys each entry names: added, or a recovery's new root
+    names_of = {x: {op[1] for op in e.ops if op[0] in ("add", "recover")}
+                for x, e in entries.items()}
+    for x in sorted(entries):
+        e = entries[x]
         f["signer"].add((x, e.signer))
         names = [op[0] for op in e.ops]
+        named_before = set().union(*(names_of[a] for a in anc[x])) if anc[x] else set()
+        readd = any(op[0] == "add" and op[1] in named_before for op in e.ops)
+        if readd:
+            f["readd"].add((x,))           # a key, once named, is never added again
         for op in e.ops:
             if op[0] == "add":
                 f["add"].add((x, op[1], op[2]))
             elif op[0] == "rem":
                 f["rem"].add((x, op[1]))
             elif op[0] == "policy":
+                gs, t = tuple(op[2]), op[3]
                 f["policy"].add((x,))
                 if op[1] is not None:
                     f["change"].add((x, op[1]))
-                for g in op[2]:
+                for g in gs:
                     f["guardian"].add((x, g))
-                f["threshold"].add((x, op[3]))
-                if not op[2]:
+                f["threshold"].add((x, t))
+                if not gs:
                     f["unguarded"].add((x,))
+                    if op[1] is None:      # genesis: its root controls
+                        for o in e.ops:
+                            if o[0] == "add" and o[2] == 3:
+                                f["ctrl"].add((x, o[1]))
+                    elif len(op) > 4 and op[4] is not None:
+                        f["ctrl"].add((x, op[4]))
+                elif len(gs) // 2 < t <= len(gs):
+                    f["majority"].add((x,))
+                else:
+                    f["bad_policy"].add((x,))
             elif op[0] == "recover":
                 f["recover"].add((x, op[1], op[3]))
                 for k in op[2]:
                     f["keeps"].add((x, k))
             elif op[0] == "sek":
                 f["sek"].add((x,))
+        decision = "recover" in names or "policy" in names
+        if decision and e.parents and len(e.ops) != 1:
+            f["bad_decision"].add((x,))    # a decision is alone in its entry
+        if any(op[0] == "recover" and op[1] in named_before for op in e.ops):
+            f["bad_decision"].add((x,))    # a new root is a new key
         # root replacement: exactly add root N and remove the signer
-        if (sorted(names) == ["add", "rem"]
+        if (sorted(names) == ["add", "rem"] and not readd
                 and any(op[0] == "add" and op[2] == 3 for op in e.ops)
                 and any(op[0] == "rem" and op[1] == e.signer for op in e.ops)):
             n = next(op[1] for op in e.ops if op[0] == "add")
             f["selfrep"].add((x, e.signer, n))
             f["is_selfrep"].add((x,))
             continue
-        # decisions are judged only as decisions, never as ordinary entries
-        decision = "recover" in names or "policy" in names
+        # decisions are judged only as decisions, never as ordinary entries;
+        # whether a removal targets a lower power is decided by the rules
         for p in (1, 2, 3):
-            bad = decision or any(n not in ALLOWED[p] for n in names)
+            bad = decision or readd or any(n not in ALLOWED[p] for n in names)
             for op in e.ops:
                 if op[0] == "add" and (op[2] >= 3 or op[2] > p):
                     bad = True            # roots are added only by replacement
-                if op[0] == "rem" and power.get(op[1], 1) >= p:
-                    bad = True            # strictly lower power only
             if bad:
                 f["badops"].add((x, p))
     return f
@@ -269,9 +289,9 @@ def evaluate_identity(world, ident, ids):
         _active.pop()
     rel = evaluate(PROGRAMS["identity"], f)
     r = {k: rel.get(k, set()) for k in (
-        "valid", "in_effect", "effective", "effective_at", "removed", "removed_at",
-        "root_eff", "current_policy", "current_key", "rec_removes", "key_added",
-        "votes", "suspended")}
+        "valid", "in_effect", "applied", "tainted", "effective", "effective_at", "removed",
+        "removed_at", "removal", "root_eff", "current_policy", "current_key", "rec_removes",
+        "key_added", "votes", "suspended", "kpow")}
     r["frozen"] = bool(rel.get("frozen"))
     r["contested"] = bool(rel.get("contested"))
     _cache[key] = r
@@ -289,18 +309,18 @@ ROLE_OPS = {
 
 
 def space_facts(world, space, ids):
-    entries = {x: world.entries[x] for x in ids if world.entries[x].log == space}
+    entries = {x: world.entries[x] for x in sorted(ids) if world.entries[x].log == space}
     f, anc = graph_facts(entries, prefix="s_")
     for k in ("author", "skey", "cites", "mem", "incarnation", "inc_from", "adds", "s_rem",
               "replaces", "s_succeed", "s_keep", "s_badops"):
         f[k] = set()
     role = {}
     for x, e in entries.items():
-        for op in e.ops:
+        for n, op in enumerate(e.ops):
             if op[0] == "create":
-                role[membership_id(x, e.author)] = (e.author, 3, x)
+                role[membership_id(x, n)] = (e.author, 3, x)
             if op[0] == "add_member":
-                role[membership_id(x, op[1])] = (op[1], op[2], x)
+                role[membership_id(x, n)] = (op[1], op[2], x)
     for i, (m, r, x) in role.items():
         f["incarnation"].add((i, m, r))
         f["inc_from"].add((i, x))
@@ -312,12 +332,12 @@ def space_facts(world, space, ids):
         if e.membership:
             f["mem"].add((x, e.membership))
         ended, made = [], []
-        for op in e.ops:
+        for n, op in enumerate(e.ops):
             if op[0] == "remove_member":
                 f["s_rem"].add((x, op[1]))
                 ended.append(op[1])
             elif op[0] == "add_member":
-                made.append(membership_id(x, op[1]))
+                made.append(membership_id(x, n))
             elif op[0] == "succeed":
                 f["s_succeed"].add((x,))
             elif op[0] == "keep":
@@ -346,11 +366,21 @@ def space_facts(world, space, ids):
     return f, entries
 
 
-def evaluate_space(world, space, ids):
+def evaluate_space(world, space, ids, ignore_frozen=False, void=(), kept=None):
+    """Evaluate a space over the closure of `ids`.
+
+    A frozen author's entries count only as far as valid entries by authors
+    who are not frozen built on them, as judged with no author frozen; so a
+    space with a frozen author is evaluated twice. With ignore_frozen, every
+    author is treated as not frozen. Entries by authors in `void` count for
+    nothing; `kept` fixes the frozen entries kept. The fuzzer uses these
+    three to compare."""
     ids = world.closure(ids)
     f, entries = space_facts(world, space, ids)
-    authors = {e.author for e in entries.values()}
-    for k in ("id_effective_at", "id_removed", "id_removed_at", "id_frozen"):
+    if void:
+        f["author"] = {(x, ("void", a) if a in void else a) for (x, a) in f["author"]}
+    authors = sorted({e.author for e in entries.values()})
+    for k in ("id_effective_at", "id_removed", "id_removed_at", "id_frozen", "kept_frozen"):
         f[k] = set()
     for a in authors:
         # the verifier's identity logs: everything it holds about the author,
@@ -362,11 +392,21 @@ def evaluate_space(world, space, ids):
             f["id_removed"].add((a, k))
         for (k, h) in r["removed_at"]:
             f["id_removed_at"].add((a, k, h))
-        if r["frozen"]:
+        if r["frozen"] and not ignore_frozen:
             f["id_frozen"].add((a,))
+    frozen = {a for (a,) in f["id_frozen"]}
+    if frozen and kept is None:
+        nf = evaluate_space(world, space, ids, ignore_frozen=True, void=void)
+        anc = ancestry(entries)
+        kept = {y for (y,) in nf["author_ok"] if entries[y].author in frozen
+                and any(y in anc[x] for (x,) in nf["valid"]
+                        if entries[x].author not in frozen)}
+    f["kept_frozen"] = {(y,) for y in (kept or ()) if y in entries}
     rel = evaluate(PROGRAMS["space"], f)
-    return {k: rel.get(k, set()) for k in (
-        "valid", "member", "author_ok", "rm2", "rm1", "rm0", "leave", "closed")}
+    out = {k: rel.get(k, set()) for k in (
+        "valid", "member", "author_ok", "rm2", "rm1", "rm0", "leave", "closed", "ended")}
+    out["kept_frozen"] = {y for (y,) in f["kept_frozen"]}
+    return out
 
 
 # ----------------------------------------------------------------- builder
@@ -405,10 +445,10 @@ class Builder:
 
     def space(self, name, author, signer, head=None):
         e = Entry(name, name, (), signer, (("create",),), author=author,
-                  head=head or self.last[author], membership=membership_id(name, author))
+                  head=head or self.last[author], membership=membership_id(name, 0))
         self.w.put(e, "space")
         self.last[name] = name
-        return membership_id(name, author)
+        return membership_id(name, 0)
 
     def swrite(self, space, name, author, signer, membership, ops, parents=None, head=None):
         if parents is None:
@@ -425,3 +465,75 @@ class Builder:
     def sp(self, space):
         return evaluate_space(self.w, space, [x for x, e in self.w.entries.items()
                                               if e.log == space])
+
+
+# --------------------------------------------------------- software rules
+#
+# What honest guardian software does. None of this decides validity; the
+# fuzzer uses it to check that guardians who follow it never cause a freeze.
+
+def decision_policy(e):
+    """The policy a decision entry acts under, or None if it is not one."""
+    if not e.parents:
+        return None
+    for op in e.ops:
+        if op[0] == "recover":
+            return op[3]
+        if op[0] == "policy":
+            return op[1]
+    return None
+
+
+def is_change(e):
+    return bool(e.parents) and any(op[0] == "policy" for op in e.ops)
+
+
+def may_confirm(world, view, guardian, d):
+    """Whether guardian software may confirm decision `d`.
+
+    `view` is the set of entries the guardian's device holds; it always
+    includes the guardian's own log, which the software syncs first.
+
+    A guardian confirms decisions under one policy in a chain: every
+    decision under that policy it has already confirmed must be in the new
+    one's causal past, and each of those that is a change of the policy must
+    be dead. A change is dead when more than n - t of the policy's guardians
+    have confirmed decisions under the policy that are concurrent with it:
+    guardians following this rule never confirm it afterwards, so it can no
+    longer reach its threshold.
+    """
+    w = world.entries
+    de = w[d]
+    p = decision_policy(de)
+    if p is None or p not in w:
+        return False
+    pol = next(op for op in w[p].ops if op[0] == "policy")
+    gs, t = tuple(pol[2]), pol[3]
+    if guardian not in gs:
+        return False
+    log = de.log
+    anc = ancestry({x: e for x, e in w.items() if e.log == log})
+
+    def confirmed_by(g, ids):
+        return {op[1] for x in ids for op in w[x].ops
+                if w[x].log == g and op[0] == "confirm" and op[1] in w
+                and w[op[1]].log == log and decision_policy(w[op[1]]) == p}
+
+    own = {x for x, e in w.items() if e.log == guardian}
+    mine = confirmed_by(guardian, own)
+    seen = {g: confirmed_by(g, view) for g in gs if g != guardian}
+    seen[guardian] = mine
+
+    def conc(a, b):
+        return a != b and a not in anc[b] and b not in anc[a]
+
+    def dead(x):
+        n = sum(1 for g in gs if any(conc(y, x) for y in seen[g]))
+        return n > len(gs) - t
+
+    for x in mine:
+        if x == d or x not in anc[d]:
+            return False
+        if is_change(w[x]) and not dead(x):
+            return False
+    return True

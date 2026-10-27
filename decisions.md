@@ -593,6 +593,9 @@ a real flaw (D33) within minutes of running.
 **Cost.** Implementers read a few dozen lines of logic beside the prose,
 and the model must be kept in step with the specification.
 
+*Amended by D35:* stratification settles that there is one answer, not that
+it is the right one. The fuzzer now also checks intent.
+
 ---
 
 ### D30. What no rule can settle freezes the identity
@@ -625,6 +628,11 @@ fuzzer showed that ignoring it would let a late confirmation undo a
 recovery. Starting over is slow and manual,
 and scammers will imitate it, so the warnings software shows must evolve
 ([later.md](later.md#starting-over)).
+
+*Amended by D37, D38 and D39:* the contest rule is now stated through the
+policy's controller, a decision that is evidence of misbehaving guardians is
+not applied, and a frozen author's entries keep counting where others built
+on them.
 
 ---
 
@@ -671,6 +679,8 @@ and a removed member can be added again and write.
 **Cost.** Sixteen bytes per space entry, and a new membership id after every
 change of role.
 
+*Amended by D40:* only a membership's own identity can leave it.
+
 ---
 
 ### D33. A recovery revokes work done without knowledge of it
@@ -688,6 +698,9 @@ no claim to survive it.
 **Cost.** Honest work done on a kept device during the waiting period, by a
 device that had not yet seen the recovery, is discarded. Devices sync the
 pending recovery during the wait, so this is rare.
+
+*Amended by D38:* this applies to recoveries that are applied, not to those
+that only freeze the identity.
 
 ---
 
@@ -707,3 +720,153 @@ secret, so it needs no one's approval.
 
 **Cost.** None beyond moving a field.
 
+---
+
+### D35. The fuzzer checks intent, not only determinism
+
+**Choice.** Besides one answer for any set of entries, the fuzzer checks
+what the answer should be: guardians following the software rules never
+freeze an identity; an honest owner keeps its membership and everything it
+wrote; removals go strictly down in power; a key removed by a recovery
+gains nothing; nobody can invalidate a member of equal or higher role, and a
+non-member cannot affect anyone; freezing an author keeps what others built
+on it. Histories include honest actors whose software follows the rules,
+thieves, and strangers. Determinism is also checked across Python hash
+seeds, in separate processes. Each fix was checked by putting the flaw back
+and watching the fuzzer find it.
+
+**Replaces.** A fuzzer that checked only determinism, monotonicity, and two
+structural properties.
+
+**Why.** A cold review of the program (V1–V11) found that the machinery for
+one answer worked, but the answer was wrong in ways no property looked for:
+anyone could end an owner's membership; a stolen phone could erase its
+owner's history; a key's power depended on hash order; guardians obeying
+the rules could freeze an identity. Each of these is a statement about
+intent, and each is now a property.
+
+**Cost.** A slower fuzzer. The intent properties are themselves claims that
+can be wrong or incomplete; what they leave out is listed in
+[model/README.md](model/README.md).
+
+---
+
+### D36. Guardians confirm in a chain
+
+**Choice.** Guardian software confirms decisions under one policy only in a
+chain: each new one descends from every one it already confirmed, and those
+that are changes of the policy must be dead, meaning that more than *n − t*
+guardians have confirmed decisions concurrent with them.
+
+**Replaces.** A rule that let a guardian confirm a change after confirming a
+decision that descended from it, so guardians each obeying it could freeze
+an identity; and that left a split vote between two changes deadlocked
+forever.
+
+**Why.** Two decisions that freeze an identity both need a majority, so some
+guardian confirms both. The chain rule stops that while both could still
+take effect, using only what the guardian knows for certain: its own log.
+Deadness lets guardians move on from a split, because a dead change can
+never reach its threshold again.
+
+**Cost.** Moving on from a split needs enough of the other guardians'
+confirmations to prove the split dead. With an odd number of guardians, the
+ones who have not voted must break it.
+
+---
+
+### D37. A policy without guardians names its controller
+
+**Choice.** A `set_recovery` that drops every guardian names, in field 8,
+the root that may change the policy afterwards. The genesis root controls
+the genesis policy. A root that replaced the controller in turn also
+controls it.
+
+**Replaces.** Any root "before revocation" may change a policy without
+guardians, computed by a parallel set of rules.
+
+**Why.** A review showed that a root removed by a recovery could, once the
+guardians later agreed to drop themselves, name its own guardians and take
+the identity. Who controls the policy is now fixed by the shape of entries,
+which is also what keeps decisions monotone, and the parallel rules are
+gone.
+
+**Cost.** A field, and a change that drops guardians without naming a
+controller leaves the policy unchangeable.
+
+---
+
+### D38. Evidence of misbehaving guardians freezes, but is not applied
+
+**Choice.** A decision that is evidence of guardians deciding both ways
+stays in effect, so nothing later undoes a decision, but it is not applied:
+a recovery among them removes no keys and revokes nothing.
+
+**Replaces.** Applying such decisions and freezing.
+
+**Why.** Former guardians acting on a policy they had agreed to replace
+could, by backdating a recovery, remove every key of the identity, which
+destroyed spaces for everyone the identity had shared with. Freezing is
+enough.
+
+**Cost.** None found.
+
+---
+
+### D39. A frozen author's entries count as far as others built on them
+
+**Choice.** A space is evaluated once as if no author were frozen. A frozen
+author's entries then count if they are in the causal past of a valid entry
+by an author who is not frozen. Software does not build on entries of an
+author it knows to be frozen.
+
+**Replaces.** Rejecting every entry of a frozen author.
+
+**Why.** Those who can freeze an identity (former guardians, an old phrase)
+could otherwise destroy every space the identity created or added people
+to, including everyone else's work. What others built on was written before
+they knew; nothing new counts. Only valid members keep a frozen author's
+entries, so a stranger cannot.
+
+**Cost.** A second evaluation of a space whose members include a frozen
+identity. A frozen author's last entries that nobody built on are lost.
+
+---
+
+### D40. Only a membership's own identity leaves it, and leaving voids only its own key's concurrent work
+
+**Choice.** A leave or `succeed` counts only if written by the membership's
+own identity, under that membership, after its creation, with a signature
+that counts. Around a leave, only entries signed by the same key are void.
+
+**Replaces.** A leave that any author's entry could write by naming the
+membership, and that voided everything concurrent with it.
+
+**Why.** A review showed that anyone, even a non-member, could end an
+owner's membership and with it the whole space; and that a stolen phone
+could backdate its owner's `succeed` and erase the owner's history. Same-key
+voiding still stops the device that left from writing on by backdating.
+
+**Cost.** A member's other devices can write concurrently with a leave they
+had not seen, and those entries stand.
+
+---
+
+### D41. A key is named once, and removals go down in the rules
+
+**Choice.** An `add_key` of a key already named in its causal past, or a
+`recover` naming one as its new root, is invalid. A key's power is the one
+its first `add_key` gives it; a key first named at two powers concurrently
+never counts. The proof of possession covers the power. The rules, not the
+input facts, check that a removal goes strictly down.
+
+**Replaces.** Power read from whichever `add_key` came first in a hash
+table's iteration order, and a proof that could be replayed at another
+power.
+
+**Why.** A review showed that a stolen admin could re-add an honest admin as
+a device by replaying its proof, and then remove it, and that whether this
+worked depended on Python's hash seed. Fixing power by the entries' shape
+removes both.
+
+**Cost.** A device that returns after removal needs a new key.

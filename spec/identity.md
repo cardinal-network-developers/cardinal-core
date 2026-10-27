@@ -97,7 +97,7 @@ Each op is a record whose key `0` is the op number.
 | 2 | `remove_key` | 1: signing key | see powers |
 | 3 | `set_encryption_key` | 1: hybrid public key; 2: list of wraps; 3: recovery wraps; 4: key chain | admin or root |
 | 4 | `wrap` | 1: list of wraps | admin or root |
-| 5 | `set_recovery` | 1: list of guardian identity ids; 2: threshold; 3: delay in seconds; 4: list of sealed shares; 5: guardian public key; 6: recovery wraps of the current encryption key; 7: id of the policy this changes (absent in genesis) | see [Guardian decisions](#guardian-decisions) |
+| 5 | `set_recovery` | 1: list of guardian identity ids; 2: threshold; 3: delay in seconds; 4: list of sealed shares; 5: guardian public key; 6: recovery wraps of the current encryption key; 7: id of the policy this changes (absent in genesis); 8: controller: the root key that may change this policy, only when it names no guardians (absent in genesis, where the genesis root controls) | see [Guardian decisions](#guardian-decisions) |
 | 6 | `recover` | 1: new root key; 2: list of signing keys to keep; 3: link key of the device that will receive shares; 4: id of the policy it acts under; 5: recovery public key of the new root | the new root key |
 | 7 | `endorse` | 1: identity id; 2: id of a decision in that identity's log | any key of the guardian, in the **guardian's own log** |
 | 8 | `confirm` | 1: identity id; 2: id of a decision in that identity's log; 3: sealed share (recoveries only) | any key of the guardian, in the **guardian's own log** |
@@ -110,11 +110,19 @@ device of the guardian sees what the guardian has confirmed.
 
 **Proof of possession.** `add_key` field 5 is an Ed25519 signature by the
 added signing key over `"cardinal add key" || binding || signing key ||
-encoding of link key`, where `binding` is the identity id, or, in the
-genesis entry, the root key. It proves the device consented to join this
-identity, and it stops anyone from listing someone else's device in their
-own log. Verifiers MUST reject an `add_key` without a valid proof, except for
+varint(power) || encoding of link key`, where `binding` is the identity id,
+or, in the genesis entry, the root key. It proves the device consented to
+join this identity with that power, and it stops anyone from listing
+someone else's device in their own log, or replaying its consent at another
+power. Verifiers MUST reject an `add_key` without a valid proof, except for
 the genesis root key, whose proof is the genesis signature.
+
+**A key is named once.** An `add_key` of a key already named in the entry's
+causal past, by an `add_key` or as a recovery's new root, is invalid, and so
+is a `recover` naming such a key as its new root. A device that returns
+after removal makes a new key. A key's power is the one its first `add_key`
+gives it; if two concurrent entries first name the same key at different
+powers, the key never counts.
 
 The label in `add_key` is visible to everyone the log is synced with. It
 SHOULD be absent; device names belong in the account space
@@ -161,14 +169,18 @@ layer. A stratified program has exactly one result, and
 [model/check.py](../model/check.py) verifies that these rules are
 stratified. The layers are:
 
-1. **Guardian decisions**, which depend only on guardians' confirmations and
-   on the shape of entries ([below](#guardian-decisions)).
-2. **What recoveries remove.**
-3. **Roots**, then whether the identity is **contested**.
-4. **Admins**, whose entries only roots and recoveries can invalidate.
-5. **Devices**, whose entries only admins, roots and recoveries can
+1. **Powers and guardian decisions**, which depend only on guardians'
+   confirmations and on the shape of entries
+   ([below](#guardian-decisions)).
+2. **Evidence that guardians decided both ways.** Such decisions stay in
+   effect, so nothing that arrives later undoes a decision, but they are not
+   applied, and they [freeze](#frozen-identities) the identity.
+3. **What recoveries remove.**
+4. **Roots**, then whether the identity is **contested**.
+5. **Admins**, whose entries only roots and recoveries can invalidate.
+6. **Devices**, whose entries only admins, roots and recoveries can
    invalidate.
-6. **Results**: keys in effect, the current encryption key, and whether the
+7. **Results**: keys in effect, the current encryption key, and whether the
    identity is **frozen**.
 
 Within each layer, three ideas do the work:
@@ -180,7 +192,8 @@ Within each layer, three ideas do the work:
   what the identity keeps of the removed key's work. Everything else that
   key signed, whenever it was written, is discarded.
 - **Strict authority.** A key's entries can be invalidated only by a
-  removal from a strictly higher layer, so nothing loops.
+  removal from a strictly higher layer, so nothing loops. A removal of a key
+  of equal or higher power is invalid, whatever else the entry holds.
 
 So:
 
@@ -244,7 +257,9 @@ While an identity is contested:
 - the current encryption key is the latest one that is an ancestor of every
   root in effect, so neither side can move the identity to a key it chose;
 - devices MUST display the identity as contested, and contacts SHOULD NOT
-  accept new space memberships from it or rotate spaces to its keys.
+  accept new space memberships from it or rotate spaces to its keys;
+- guardian software MUST NOT confirm a change to a policy that names no
+  guardians, which would leave the contest with no one to settle it.
 
 A contest ends only by a recovery, which the guardians decide.
 
@@ -261,20 +276,23 @@ Some conflicts have no one above them to settle them. An identity is
 **frozen** when its entries show one of these:
 
 - **Guardians who decided both ways.** Two decisions in effect under the
-  same policy, neither an ancestor of the other, or one made after a change
-  of that policy in its own past. With a majority threshold, that means some
-  guardian confirmed both, or the policy had no guardians and two holders of
-  the phrase acted.
-- **A contest with no guardians to settle it.** The identity is contested
-  and its current policy names no guardians.
-- **Guardians named by one side of a contest.** A policy without guardians
-  was changed by an entry that is not an ancestor of both sides of a root
-  contest.
+  same policy, neither an ancestor of the other, or one made under a policy
+  that a change in its own causal past had already replaced. With a
+  majority threshold, that means some guardian confirmed both. Such a
+  decision stays in effect, so nothing later undoes it, but it is not
+  applied: a recovery that is evidence of misbehaving guardians removes no
+  keys.
+- **A contest with no guardians to settle it.** The controller of a policy
+  that names no guardians, or a root that replaced it in turn, replaced
+  itself twice concurrently, and on both sides that policy was still the
+  one in effect. That is two holders of the phrase, with no one to say which
+  is the person.
 
 Freezing is permanent. Adding entries never unfreezes an identity, which the
-fuzzer in [model/fuzz.py](../model/fuzz.py) checks. A frozen identity's
-entries are no longer accepted in any space, and its keys no longer open
-sessions. Software shows contacts that the identity "can no longer be
+fuzzer in [model/fuzz.py](../model/fuzz.py) checks. A frozen identity's keys
+no longer open sessions, and its entries count in a space only as far as
+valid entries of others built on them ([spaces.md](spaces.md#authors)): what
+it wrote before others knew stands, and nothing new does. Software shows contacts that the identity "can no longer be
 trusted", and offers the person and their contacts the slow, manual way
 forward: a new identity, recognized by each contact in person
 ([later.md](../later.md#starting-over)).
@@ -309,8 +327,10 @@ itself with a new phrase.
 
 `set_recovery` sets the **recovery policy**: guardian identities, a
 threshold, a delay, and the guardian key. When guardians are named, the
-threshold MUST be more than half of them; a `set_recovery` that breaks this
-is invalid. The recommended default is 3 of 5 with a delay of seven days.
+threshold MUST be more than half of them and no more than all of them; a
+`set_recovery` that breaks this is never in effect, and a genesis entry that
+breaks it makes the whole log invalid. The recommended default is 3 of 5
+with a delay of seven days.
 More guardians make the identity more robust, because a majority must stay
 reachable for as long as the policy lasts. Software SHOULD offer to name
 guardians during first setup, and SHOULD keep asking until the person has.
@@ -347,12 +367,20 @@ Guardians decide both. Your court approves changes to your court.
   ([D31](../decisions.md)). An identity whose guardian is frozen SHOULD
   replace that guardian, which the remaining guardians approve.
 - **Signer.** A `recover` is signed by the new root key it names, which
-  proves possession. A `set_recovery` is signed by a key of the identity.
+  proves possession. A `set_recovery` under a policy that names guardians is
+  signed by a key named in its causal past and not removed or replaced
+  there. That signer only proposes; the guardians decide, after checking
+  with the person. A `set_recovery` under a policy that names no guardians
+  is signed by that policy's **controller** (field 8; the genesis root for
+  the genesis policy), or by a root that replaced the controller in turn,
+  and that was not itself replaced in the change's causal past. A root that
+  a recovery removed is not the controller of a policy named after it, so it
+  gains nothing when guardians are later dropped.
 - **Approved.** Under a policy that names guardians, a decision is approved
   when distinct guardians of that policy, meeting its threshold, have
   counting confirmations of it. Under a policy that names no guardians, a
-  `recover` is never approved, and a `set_recovery` is approved if it is
-  signed by a root that is in its causal past and was not replaced there.
+  `recover` is never approved, and a `set_recovery` is approved by its
+  signature.
 - **In effect.** A decision is in effect if it is approved and the policy it
   acts under is in effect. The genesis policy is in effect, and so is every
   `set_recovery` decision in effect.
@@ -366,13 +394,31 @@ its own causal past is evidence that guardians misbehaved, and it
 policy that do not know each other. Former guardians therefore cannot act on
 a policy they agreed to replace; acting together, they can only freeze it.
 
-Honest guardians never cause a freeze. Guardian software MUST NOT confirm a
-decision under a policy if the decision's causal past contains a change of
-that policy that is approved or that the guardian has confirmed, or if the
-decision is concurrent with another decision under that policy that the
-guardian has confirmed. It MUST sync the guardian's own log before
-confirming, so that a guardian's phone and laptop cannot confirm opposite
-decisions unawares.
+**Honest guardians never cause a freeze.** Guardian software confirms
+decisions under one policy **in a chain**:
+
+- It MUST NOT confirm a decision unless every decision under that policy the
+  guardian has already confirmed is in the new decision's causal past.
+- Of those, each that is a change of the policy must be **dead**: more than
+  *n − t* of the policy's guardians have confirmed decisions under the policy
+  that are concurrent with it, where *n* is the number of guardians and *t*
+  the threshold. Guardians following this rule never confirm it afterwards,
+  so it can no longer reach its threshold.
+- It MUST sync the guardian's own log before confirming, so that a
+  guardian's phone and laptop cannot confirm opposite decisions unawares.
+
+With a majority threshold, two decisions that would freeze the identity
+both need some guardian to confirm both, and the chain rule never lets one
+guardian do that while both could still take effect. The rule needs to know
+only the guardian's own confirmations, plus, to move on from a split vote,
+enough of the others' to see that a change is dead. A split between two
+concurrent changes therefore resolves itself: once each is dead, every
+guardian may confirm a decision that descends from both. With an even
+number of guardians, a split can be dead at once; with an odd number, the
+guardians who have not voted break it. The fuzzer checks that guardians
+following this rule, with partial views of each other and an honest owner
+whose devices are partitioned from each other, never freeze an identity,
+whatever thieves do.
 
 ### How guardians act
 
@@ -382,7 +428,8 @@ affects what a set of entries means.
 1. **Recover.** The person's new device generates a new root key and a new
    phrase. A guardian's device, which holds the identity's log, proposes
    parents: the latest entries that the person recognizes, leaving out any
-   a thief wrote. The new device signs the `recover` entry, naming the new
+   a thief wrote, and SHOULD leave out changes of the policy that are not
+   yet approved, so that the recovery does not wait on them. The new device signs the `recover` entry, naming the new
    root, the keys to keep, its link key, and the policy, and the guardian's
    device appends it to the identity's log.
 2. **Endorse.** Each guardian, after confirming with the person by whatever
@@ -404,7 +451,8 @@ A change of policy is decided the same way, without step 1: guardian
 software that sees a `set_recovery` alerts the person's devices, waits the
 delay (doubled after an objection), checks with the person, and confirms.
 The first guardians, named under a policy with none, are not asked: the
-root names them. Guardian software SHOULD still ask each new guardian to
+controller names them. A change that drops every guardian names, in field
+8, the root that will control the policy afterwards: the current root. Guardian software SHOULD still ask each new guardian to
 accept the role.
 
 Any admin or root key of the identity may append an `object`. It cancels
@@ -435,7 +483,10 @@ A recovery is never undone. Whether it is in effect depends only on
 confirmations, and a confirmation is judged as of when it was written. A
 guardian device stolen years later can confirm a conflicting decision only
 by writing it concurrently with what it already confirmed, which freezes the
-identity rather than reviving anything.
+identity rather than reviving anything. A recovery that is itself evidence
+of guardians deciding both ways is in effect but is not applied: former
+guardians acting on a policy they agreed to replace can freeze the identity,
+but cannot take its keys away.
 
 ### Data recovery
 

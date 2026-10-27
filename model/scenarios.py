@@ -9,7 +9,7 @@ import sys
 import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from world import Builder  # noqa: E402
+from world import Builder, may_confirm  # noqa: E402
 
 SCENARIOS = []
 
@@ -378,7 +378,7 @@ def U7_witnessing_does_not_loop_through_membership():
     people(b, "Ana", "Bob")
     ana = b.space("S", "Ana", "aAna")
     b.swrite("S", "X", "Ana", "pAna", ana, [("add_member", "Bob", 1)])
-    bob = "X:Bob"
+    bob = "X#0"
     b.swrite("S", "W", "Ana", "aAna", ana, [("remove_member", bob)])
     b.write("Ana", "lost", "aAna", [("rem", "pAna")], parents=["Ana"])
     r = b.sp("S")
@@ -391,12 +391,12 @@ def U8a_lowering_a_role_keeps_allowed_concurrent_work():
     people(b, "Ana", "Ben")
     ana = b.space("S", "Ana", "aAna")
     b.swrite("S", "e1", "Ana", "aAna", ana, [("add_member", "Ben", 2)])
-    ben = "e1:Ben"
+    ben = "e1#0"
     b.swrite("S", "msg", "Ben", "pBen", ben, [("app",)], parents=["e1"])
     b.swrite("S", "add", "Ben", "pBen", ben, [("add_member", "Cy", 1)], parents=["e1"])
     b.swrite("S", "lower", "Ana", "aAna", ana,
              [("remove_member", ben), ("add_member", "Ben", 1)], parents=["e1"])
-    b.swrite("S", "msg2", "Ben", "pBen", "lower:Ben", [("app",)], parents=["lower", "msg", "add"])
+    b.swrite("S", "msg2", "Ben", "pBen", "lower#1", [("app",)], parents=["lower", "msg", "add"])
     r = b.sp("S")
     assert ("msg",) in r["valid"] and ("add",) not in r["valid"] and ("msg2",) in r["valid"]
 
@@ -407,10 +407,10 @@ def U8a_removed_member_can_be_added_again():
     people(b, "Ana", "Cy")
     ana = b.space("S", "Ana", "aAna")
     b.swrite("S", "e1", "Ana", "aAna", ana, [("add_member", "Cy", 1)])
-    b.swrite("S", "e2", "Ana", "aAna", ana, [("remove_member", "e1:Cy")])
-    b.swrite("S", "old", "Cy", "pCy", "e1:Cy", [("app",)])
+    b.swrite("S", "e2", "Ana", "aAna", ana, [("remove_member", "e1#0")])
+    b.swrite("S", "old", "Cy", "pCy", "e1#0", [("app",)])
     b.swrite("S", "e3", "Ana", "aAna", ana, [("add_member", "Cy", 1)])
-    b.swrite("S", "new", "Cy", "pCy", "e3:Cy", [("app",)])
+    b.swrite("S", "new", "Cy", "pCy", "e3#0", [("app",)])
     r = b.sp("S")
     assert ("old",) not in r["valid"] and ("new",) in r["valid"]
 
@@ -421,8 +421,8 @@ def U8b_leaving_cannot_be_backdated_around():
     people(b, "Ana", "Cy")
     ana = b.space("S", "Ana", "aAna")
     b.swrite("S", "e1", "Ana", "aAna", ana, [("add_member", "Cy", 1)])
-    b.swrite("S", "bye", "Cy", "pCy", "e1:Cy", [("remove_member", "e1:Cy")])
-    b.swrite("S", "late", "Cy", "pCy", "e1:Cy", [("app",)], parents=["e1"])
+    b.swrite("S", "bye", "Cy", "pCy", "e1#0", [("remove_member", "e1#0")])
+    b.swrite("S", "late", "Cy", "pCy", "e1#0", [("app",)], parents=["e1"])
     r = b.sp("S")
     assert ("bye",) in r["valid"] and ("late",) not in r["valid"]
 
@@ -433,9 +433,9 @@ def succession_closes_the_old_space():
     people(b, "Ana", "Ben")
     ana = b.space("S", "Ana", "aAna")
     b.swrite("S", "e1", "Ana", "aAna", ana, [("add_member", "Ben", 2)])
-    b.swrite("S", "concurrent", "Ben", "pBen", "e1:Ben", [("app",)], parents=["e1"])
+    b.swrite("S", "concurrent", "Ben", "pBen", "e1#0", [("app",)], parents=["e1"])
     b.swrite("S", "succ", "Ana", "aAna", ana, [("succeed",)], parents=["e1"])
-    b.swrite("S", "after", "Ben", "pBen", "e1:Ben", [("app",)], parents=["succ", "concurrent"])
+    b.swrite("S", "after", "Ben", "pBen", "e1#0", [("app",)], parents=["succ", "concurrent"])
     b.swrite("S", "anaback", "Ana", "aAna", ana, [("app",)], parents=["e1"])
     r = b.sp("S")
     assert ("concurrent",) in r["valid"] and ("after",) not in r["valid"]
@@ -448,7 +448,7 @@ def U9_adding_an_existing_member_changes_nothing():
     people(b, "Ana", "Ben")
     ana = b.space("S", "Ana", "aAna")
     b.swrite("S", "e1", "Ana", "aAna", ana, [("add_member", "Ben", 2)])
-    b.swrite("S", "e2", "Ben", "pBen", "e1:Ben", [("add_member", "Ana", 0)])
+    b.swrite("S", "e2", "Ben", "pBen", "e1#0", [("add_member", "Ana", 0)])
     b.swrite("S", "e3", "Ana", "aAna", ana, [("app",)])
     r = b.sp("S")
     assert ("e3",) in r["valid"] and (ana,) in r["member"]
@@ -460,7 +460,7 @@ def T3_owners_cannot_remove_owners():
     people(b, "Ana", "Ben")
     ana = b.space("S", "Ana", "aAna")
     b.swrite("S", "e1", "Ana", "aAna", ana, [("add_member", "Ben", 3)])
-    b.swrite("S", "coup", "Ben", "pBen", "e1:Ben", [("remove_member", ana)], parents=["S"] and ["e1"])
+    b.swrite("S", "coup", "Ben", "pBen", "e1#0", [("remove_member", ana)], parents=["S"] and ["e1"])
     b.swrite("S", "e2", "Ana", "aAna", ana, [("app",)], parents=["e1"])
     r = b.sp("S")
     assert ("coup",) not in r["valid"] and ("e2",) in r["valid"] and (ana,) in r["member"]
@@ -608,6 +608,248 @@ def concession_thief_of_frozen_guardian_still_votes_once():
     confirm(b, "G2", "c2", "rec")
     assert effect(b.ident("I")) == {"rec"}         # the stolen vote counted
 
+
+
+# ------------------------------------------------------------ cold review V
+
+@scenario
+def V1_only_a_membership_s_own_identity_ends_it():
+    b = Builder()
+    people(b, "Ana", "Ben", "Eve")
+    ana = b.space("S", "Ana", "aAna")
+    b.swrite("S", "e1", "Ana", "aAna", ana, [("add_member", "Ben", 0)])
+    b.swrite("S", "work", "Ana", "aAna", ana, [("app",)])
+    # Ben writes under Ana's membership, ending it; Eve, a non-member, succeeds
+    b.swrite("S", "forge", "Ben", "pBen", ana, [("remove_member", ana)], parents=["S"])
+    b.swrite("S", "forge2", "Eve", "pEve", ana, [("succeed",)], parents=["S"])
+    r = b.sp("S")
+    assert {("S",), ("e1",), ("work",)} <= r["valid"], r["valid"]
+    assert (ana,) in r["member"] and not r["leave"]
+
+
+@scenario
+def V2_a_stolen_phone_cannot_erase_its_owner_s_history():
+    b = Builder()
+    people(b, "Ana", "Ben")
+    ana = b.space("S", "Ana", "aAna")
+    b.swrite("S", "e1", "Ana", "aAna", ana, [("add_member", "Ben", 1)])
+    b.swrite("S", "b1", "Ben", "pBen", "e1#0", [("app",)])
+    b.swrite("S", "a2", "Ana", "aAna", ana, [("app",)])
+    # a thief holding Ana's phone backdates a succeed to genesis; her laptop
+    # writes once more before she notices, which witnesses it
+    b.swrite("S", "t", "Ana", "pAna", ana, [("succeed",)], parents=["S"])
+    b.swrite("S", "a3", "Ana", "aAna", ana, [("app",)])
+    b.write("Ana", "rm", "aAna", [("rem", "pAna")])
+    r = b.sp("S")
+    assert {("S",), ("e1",), ("b1",), ("a2",)} <= r["valid"], r["valid"]
+    assert ("e1#0",) in r["member"]
+
+
+@scenario
+def V3_power_is_fixed_by_the_first_add_and_removals_go_down():
+    b = Builder()
+    b.identity("I", "R0", admin="A0")
+    b.write("I", "e1", "A0", [("add", "A1", 2)])
+    b.write("I", "t1", "A1", [("add", "A0", 1)])       # re-adding a named key
+    b.write("I", "t2", "A1", [("rem", "A0")])          # an admin removing an admin
+    r = b.ident("I")
+    assert keys(r) == {"A0", "A1"}, keys(r)
+    assert ("t1",) not in r["valid"] and ("t2",) not in r["valid"]
+    # two concurrent first adds at different powers: the key never counts
+    c = Builder()
+    c.identity("I", "R0", admin="A0")
+    c.write("I", "x", "A0", [("add", "K", 1)], parents=["I"])
+    c.write("I", "y", "R0", [("add", "K", 2)], parents=["I"])
+    assert "K" not in keys(c.ident("I"))
+
+
+def guarded4(b):
+    for g in ("G1", "G2", "G3", "G4"):
+        b.identity(g, "r" + g, admin="a" + g, devices=("d" + g,))
+    b.identity("I", "R0", admin="A0", devices=("D0",),
+               guardians=("G1", "G2", "G3", "G4"), threshold=3)
+
+
+@scenario
+def V4_honest_guardians_following_the_chain_rule_do_not_freeze():
+    b = Builder()
+    guarded(b)
+    b.write("I", "rec", "N", [("recover", "N", ("A0",), "I")])
+    confirm(b, "G1", "c1", "rec")
+    confirm(b, "G2", "c2", "rec")
+    b.write("I", "S", "N", [("policy", "I", ("G1", "G2", "G3"), 2)])
+    assert may_confirm(b.w, set(b.w.entries), "G1", "S")
+    confirm(b, "G1", "c1s", "S")
+    b.write("I", "rec2", "N2", [("recover", "N2", ("A0",), "I")])
+    assert not may_confirm(b.w, set(b.w.entries), "G1", "rec2")   # S is not dead
+    assert may_confirm(b.w, set(b.w.entries), "G2", "rec2")
+    confirm(b, "G2", "c2r", "rec2")
+    confirm(b, "G3", "c3r", "rec2")
+    r = b.ident("I")
+    assert "rec2" in effect(r) and not r["frozen"]
+    # G3 has confirmed rec2, which has S in its past: it may not confirm S
+    assert not may_confirm(b.w, set(b.w.entries), "G3", "S")
+    confirm(b, "G3", "c3s", "S")                   # a guardian breaking the rule
+    assert b.ident("I")["frozen"]
+
+
+@scenario
+def V9_a_split_vote_dies_and_the_guardians_move_on():
+    b = Builder()
+    guarded4(b)
+    b.write("I", "S1", "A0", [("policy", "I", ("G1", "G2", "G3"), 2)], parents=["I"])
+    b.write("I", "S2", "D0", [("policy", "I", ("G2", "G3", "G4"), 2)], parents=["I"])
+    for g, d in (("G1", "S1"), ("G2", "S1"), ("G3", "S2"), ("G4", "S2")):
+        assert may_confirm(b.w, set(b.w.entries), g, d)
+        confirm(b, g, "c" + g + d, d)
+    b.write("I", "rec", "N", [("recover", "N", ("A0",), "I")], parents=["S1", "S2"])
+    for g in ("G1", "G2", "G3"):
+        assert may_confirm(b.w, set(b.w.entries), g, "rec"), g
+        confirm(b, g, "c" + g + "rec", "rec")
+    r = b.ident("I")
+    assert "rec" in effect(r) and roots(r) == {"N"} and not r["frozen"]
+    # with five guardians, a 2-2 split is not dead until the fifth acts
+    c = Builder()
+    for g in ("G1", "G2", "G3", "G4", "G5"):
+        c.identity(g, "r" + g, admin="a" + g)
+    c.identity("I", "R0", admin="A0", guardians=("G1", "G2", "G3", "G4", "G5"), threshold=3)
+    c.write("I", "S1", "A0", [("policy", "I", ("G1",), 1)], parents=["I"])
+    c.write("I", "S2", "R0", [("policy", "I", ("G2",), 1)], parents=["I"])
+    for g, d in (("G1", "S1"), ("G2", "S1"), ("G3", "S2"), ("G4", "S2")):
+        confirm(c, g, "c" + g + d, d)
+    c.write("I", "rec", "N", [("recover", "N", (), "I")], parents=["S1", "S2"])
+    assert not may_confirm(c.w, set(c.w.entries), "G1", "rec")
+    assert may_confirm(c.w, set(c.w.entries), "G5", "S1")
+
+
+@scenario
+def V9_dead_means_it_can_no_longer_reach_its_threshold():
+    # three guardians, threshold 2: one confirmation of a concurrent change
+    # leaves two guardians who could still approve, so the change is not dead
+    b = Builder()
+    guarded(b)
+    b.write("I", "S1", "A0", [("policy", "I", ("G1", "G2", "G3"), 2)], parents=["I"])
+    b.write("I", "S2", "D0", [("policy", "I", ("G1", "G2"), 2)], parents=["I"])
+    confirm(b, "G1", "c1", "S1")
+    confirm(b, "G2", "c2", "S2")
+    b.write("I", "D", "N", [("recover", "N", (), "I")], parents=["S1", "S2"])
+    assert not may_confirm(b.w, set(b.w.entries), "G1", "D")
+    assert not may_confirm(b.w, set(b.w.entries), "G2", "D")
+    assert may_confirm(b.w, set(b.w.entries), "G3", "S1")
+
+@scenario
+def V5_a_root_removed_by_recovery_cannot_change_an_unguarded_policy():
+    b = Builder()
+    guarded(b)
+    for x in ("X1", "X2", "X3"):
+        b.identity(x, "r" + x, admin="a" + x)
+    b.write("I", "rec", "N", [("recover", "N", ("A0",), "I")])
+    confirm(b, "G1", "c1", "rec")
+    confirm(b, "G2", "c2", "rec")
+    b.write("I", "S1", "N", [("policy", "I", (), 0, "N")])          # N controls
+    confirm(b, "G1", "c1s", "S1")
+    confirm(b, "G2", "c2s", "S1")
+    b.write("I", "S2", "R0", [("policy", "S1", ("X1", "X2", "X3"), 2)])
+    confirm(b, "X1", "x1", "S2")
+    confirm(b, "X2", "x2", "S2")
+    b.write("I", "rec3", "T", [("recover", "T", (), "S2")])
+    confirm(b, "X1", "x1r", "rec3")
+    confirm(b, "X2", "x2r", "rec3")
+    r = b.ident("I")
+    assert effect(r) == {"rec", "S1"} and roots(r) == {"N"} and not r["frozen"], r
+    # the controller can name guardians again
+    b.write("I", "S3", "N", [("policy", "S1", ("G1", "G2", "G3"), 2)], parents=["S1"])
+    assert "S3" in effect(b.ident("I"))
+
+
+@scenario
+def V6_freezing_an_author_keeps_what_others_built_on():
+    b = Builder()
+    guarded(b, "Ana")
+    people(b, "Ben")
+    for h in ("H1", "H2", "H3"):
+        b.identity(h, "r" + h, admin="a" + h)
+    ana = b.space("S", "Ana", "A0")
+    b.swrite("S", "e1", "Ana", "A0", ana, [("add_member", "Ben", 1)])
+    b.swrite("S", "ben", "Ben", "pBen", "e1#0", [("app",)])
+    b.swrite("S", "last", "Ana", "A0", ana, [("app",)])
+    b.write("Ana", "s", "A0", [("policy", "Ana", ("H1", "H2", "H3"), 2)])
+    confirm(b, "G1", "c1", "s")
+    confirm(b, "G2", "c2", "s")
+    # years later, former guardians act on the replaced policy
+    b.write("Ana", "rec", "N", [("recover", "N", (), "Ana")], parents=["Ana"])
+    confirm(b, "G1", "c1b", "rec")
+    confirm(b, "G2", "c2b", "rec")
+    i = b.ident("Ana")
+    assert i["frozen"] and "rec" not in {d for (d,) in i["applied"]}
+    assert "A0" in keys(i), "a tainted recovery is not applied"
+    r = b.sp("S")
+    assert {("S",), ("e1",), ("ben",)} <= r["valid"] and ("last",) not in r["valid"], r
+
+
+@scenario
+def V7_thresholds_must_be_a_majority():
+    b = Builder()
+    for g in ("G1", "G2", "G3"):
+        b.identity(g, "r" + g, admin="a" + g)
+    b.identity("I", "R0", admin="A0", guardians=("G1", "G2", "G3"), threshold=0)
+    b.write("I", "rec", "T", [("recover", "T", (), "I")])
+    r = b.ident("I")
+    assert not effect(r) and not roots(r) and not keys(r)
+    c = Builder()
+    guarded(c)
+    c.write("I", "s", "A0", [("policy", "I", ("G1", "G2", "G3"), 1)])
+    confirm(c, "G1", "c1", "s")
+    confirm(c, "G2", "c2", "s")
+    assert "s" not in effect(c.ident("I"))
+
+
+@scenario
+def V8_lowering_an_admin_discards_its_concurrent_adds():
+    # documented, not fixed: keeping them would let a lowered admin backdate
+    # additions forever. Software warns, and the owner adds the member again.
+    b = Builder()
+    people(b, "Ana", "Ben", "Cy")
+    ana = b.space("S", "Ana", "aAna")
+    b.swrite("S", "e1", "Ana", "aAna", ana, [("add_member", "Ben", 2)])
+    b.swrite("S", "addcy", "Ben", "pBen", "e1#0", [("add_member", "Cy", 1)], parents=["e1"])
+    b.swrite("S", "cy1", "Cy", "pCy", "addcy#0", [("app",)], parents=["addcy"])
+    b.swrite("S", "low", "Ana", "aAna", ana,
+             [("remove_member", "e1#0"), ("add_member", "Ben", 1)], parents=["e1"])
+    r = b.sp("S")
+    assert ("addcy",) not in r["valid"] and ("cy1",) not in r["valid"]
+    b.swrite("S", "again", "Ana", "aAna", ana, [("add_member", "Cy", 1)])
+    b.swrite("S", "cy2", "Cy", "pCy", "again#0", [("app",)])
+    assert ("cy2",) in b.sp("S")["valid"]
+
+
+@scenario
+def V10_decisions_are_alone_and_signed_by_a_key_in_effect():
+    b = Builder()
+    guarded(b)
+    b.write("I", "rec", "N", [("recover", "N", ("A0",), "I"), ("recover", "M", (), "I")])
+    confirm(b, "G1", "c1", "rec")
+    confirm(b, "G2", "c2", "rec")
+    r = b.ident("I")
+    assert not effect(r) and roots(r) == {"R0"} and not r["contested"]
+    c = Builder()
+    guarded(c)
+    c.write("I", "x", "A0", [("rem", "D0")])
+    c.write("I", "s", "D0", [("policy", "I", ("G1", "G2", "G3"), 2)])
+    confirm(c, "G1", "c1", "s")
+    confirm(c, "G2", "c2", "s")
+    assert "s" not in effect(c.ident("I"))
+
+
+@scenario
+def V11_memberships_are_named_by_entry_and_position():
+    b = Builder()
+    people(b, "Ana", "Ben")
+    ana = b.space("S", "Ana", "aAna")
+    b.swrite("S", "e1", "Ana", "aAna", ana, [("add_member", "Ben", 0), ("add_member", "Ben", 2)])
+    b.swrite("S", "w", "Ben", "pBen", "e1#1", [("app",)])
+    r = b.sp("S")
+    assert {("e1#0",), ("e1#1",)} <= r["member"] and ("w",) in r["valid"]
 
 def main():
     failed = 0

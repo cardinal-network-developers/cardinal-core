@@ -84,8 +84,15 @@ member, so it cannot loop through membership:
   the cited head of the author's identity log, as
   [evaluated](identity.md#evaluating-a-log) from the whole log the verifier
   holds. A key whose adding entry is invalid was never added;
-- the author must not be [frozen](identity.md#frozen-identities);
-- if the key has since been removed, the entry must be **witnessed**.
+- if the key has since been removed, the entry must be **witnessed**;
+- if the author is [frozen](identity.md#frozen-identities), the entry
+  counts only if others built on it: evaluated as if no author were frozen,
+  its signature counts and it is in the causal past of a valid entry by an
+  author who is not frozen. What a frozen author wrote before anyone knew
+  stands, with everything others built on it; nothing new does. This is the
+  one place the rules evaluate the space twice, once as if no one were
+  frozen and once for real, which cannot loop. Software MUST NOT build on
+  entries of an author it knows to be frozen.
 
 A key may have been sold, broken, or stolen; the space cannot tell which,
 and a sold laptop whose key was never wiped could otherwise write as its old
@@ -137,7 +144,10 @@ owner, the same way from its `start` op. Every entry names, in field 9, the
 membership it is written under.
 
 - **Ending** a membership is `remove_member` with its id. A member may end
-  its own membership at any time: that is leaving.
+  its own membership at any time: that is leaving. Only the membership's own
+  identity can leave it: the entry must be written by that identity, under
+  that membership, in the membership's causal future, with a signature that
+  counts.
 - **Changing a role** is ending one membership and adding another for the
   same identity, in the same entry.
 - **Adding someone who is already a member** creates a second membership. It
@@ -207,6 +217,18 @@ readers:
   from a higher layer, these rules never loop, and backdating gains nothing
   at any role: an entry written with old parents after an end is concurrent
   with it.
+- **Leaving** voids what descends from it, and, of what is concurrent with
+  it, only entries signed by the same key. A stolen phone that backdates its
+  owner's leave or `succeed` cannot erase what the owner's other devices
+  wrote; and a member who leaves cannot keep writing with that device by
+  backdating.
+- **Ending an admin's membership**, including lowering its role, voids its
+  concurrent `add_member` ops, and so the memberships they created and
+  everything written under them. Keeping them would let a lowered admin
+  backdate additions forever. Software MUST warn the person lowering or
+  removing an admin when this discards members, and offers to add them
+  again; their software re-applies their discarded work as changes to
+  re-apply.
 
 ## Succession
 
