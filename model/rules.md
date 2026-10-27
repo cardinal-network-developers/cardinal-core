@@ -53,7 +53,7 @@ which comes from guardians' logs.
 | `badops(E,P)` | E contains an op that a key of power P may not perform ([table](../spec/identity.md#operations)), adds a key at a power above P or a root, contains `readd`, is a decision, or uses a critical [extension](../spec/evolution.md) that no `set_protocol` in its causal past declares (critical extensions and `set_protocol` need admin power). Whether a removal goes down in power is decided by the rules (`bad`) |
 | `policy(E)` | E carries `set_recovery` |
 | `change(D,P)` | D is a `set_recovery` after genesis, naming P as the policy it changes |
-| `guardian(P,G)`, `threshold(P,T)`, `unguarded(P)` | the guardians and threshold of policy P; P names no guardians |
+| `guardian(P,G)`, `threshold(P,T)`, `unguarded(P)` | the guardians and threshold of policy P; P names no guardians. The log holds [commitments](../spec/identity.md#hidden-guardians); a verifier learns G when G's confirmation reveals the salt, and a confirmation that does not open a commitment counts for nothing, so the model names guardians directly |
 | `majority(P)`, `bad_policy(P)` | P names guardians and its threshold is more than half of them and no more than all; P names guardians and its threshold is not |
 | `ctrl(P,R)` | P names no guardians and R controls it: the genesis root for the genesis policy, otherwise field 8 |
 | `recover(D,N,P)`, `keeps(D,K)` | D is a `recover` naming new root N under policy P; it keeps key K |

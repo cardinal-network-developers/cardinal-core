@@ -117,7 +117,7 @@ decide ([identity.md](identity.md#guardians)).
 
 **What an agent learns.** An agent that verifies entries itself needs the
 identity logs of the members of its spaces, so it learns their identity ids
-and whatever their logs reveal ([identity.md](identity.md#distribution)).
+and whatever their logs reveal ([Who sees what](../architecture.md#who-sees-what)).
 That is consented: the members accepted a space with the agent in it. An
 agent that only needs to act can instead be a local application of its
 principal's service, and learn nothing beyond the space.

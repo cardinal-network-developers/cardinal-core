@@ -178,6 +178,30 @@ trustworthy, and replaced by a new one that each contact recognizes in
 person. The protocol adds to relationships people already have; when the
 evidence runs out, it hands the decision back to them.
 
+## Who sees what
+
+What leaks is often what gets people hurt: not the content of a message,
+but who someone's guardians are, who they talk to, or when they changed
+phones. Hiding what is not needed does not replace cryptography, but it stops
+many attacks before they start, such as someone tracking down a person's
+guardians. The rule: every field is visible only to those who need it to
+verify or deliver, and is revealed only when it is used.
+
+| Who | Sees | Does not see |
+|---|---|---|
+| **Your own devices** | everything: the account space, petnames, device names, guardians, grants | |
+| **Anyone your identity log is synced with**: contacts, co-members, hosts, guardians | your signing keys and their powers, link keys, how many guardians and the threshold, recovery requests, the shape of the log's history | device names (not in the log); who your guardians are, until one [acts](spec/identity.md#hidden-guardians); when you changed devices (entries carry no time) |
+| **Members of a space** | its content, its members' identity ids and roles, who wrote what and when, members' reach nodes (their hosts' endpoints and a token for this space), each agent's principal | your other spaces, contacts, devices' names, or anything from sessions about other spaces ([spaces.md](spec/spaces.md#holding-a-space)) |
+| **A guardian's contacts** | that the guardian endorsed or confirmed something, named by a hash | whom it was for, unless they also hold that identity's log |
+| **An application** | the spaces you granted it, members as handles | keys, logs, addresses, other spaces, other applications ([apps.md](spec/apps.md)) |
+| **Your hosts** | the encrypted objects they store and their sizes; envelope counts per token; the addresses of devices that connect | content, members, authors, or which space an envelope concerns ([hosts.md](spec/hosts.md#what-a-mailbox-learns)) |
+| **The network** | packet sizes, timing, and addresses | identities, keys, or sessions: static keys are encrypted and session indexes are random ([link.md](spec/link.md)) |
+| **Anyone** | public spaces and front doors you publish | everything else; devices answer strangers with silence |
+
+What remains visible is what verification needs. A contact must know which
+keys speak for you, so they see your keys and powers. A member must know who
+wrote an entry, so members see authors. Whatever no one needs, no one gets.
+
 ## What is deliberately not here yet
 
 Compute pooling, live process handoff, commerce, and very large groups are

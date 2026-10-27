@@ -25,7 +25,7 @@ with exactly one signature.
 | 1 | identity | bytes(32) | absent in the genesis entry |
 | 2 | parents | list of bytes(32) | ids of entries this one follows; absent in genesis, otherwise non-empty |
 | 3 | ops | list of op records | applied in list order |
-| 4 | time | uint | author's clock, milliseconds since 1970; display only, never used for ordering or security |
+| 4 | | | reserved. Identity entries carry no time: it would tell everyone the log is synced with when the person changed their devices |
 | 5 | protocol | record | genesis only: the [protocol record](evolution.md#declaring-what-you-speak) this identity speaks; its base fixes the suite, [suite 1](crypto.md#suite-1) for this specification |
 
 - The **identity id** is the id of the genesis entry.
@@ -94,14 +94,14 @@ Each op is a record whose key `0` is the op number.
 
 | Op | Name | Fields | Signer |
 |---|---|---|---|
-| 1 | `add_key` | 1: signing key (32); 2: power; 3: link key (device and admin only); 4: label (text, display only); 5: proof; 6: recovery public key (roots only) | see powers |
+| 1 | `add_key` | 1: signing key (32); 2: power; 3: link key (device and admin only); 4: reserved; 5: proof; 6: recovery public key (roots only) | see powers |
 | 2 | `remove_key` | 1: signing key | see powers |
 | 3 | `set_encryption_key` | 1: hybrid public key; 2: list of wraps; 3: recovery wraps; 4: key chain | admin or root |
 | 4 | `wrap` | 1: list of wraps | admin or root |
-| 5 | `set_recovery` | 1: list of guardian identity ids; 2: threshold; 3: delay in seconds; 4: list of sealed shares; 5: guardian public key; 6: recovery wraps of the current encryption key; 7: id of the policy this changes (absent in genesis); 8: controller: the root key that may change this policy, only when it names no guardians (absent in genesis, where the genesis root controls) | see [Guardian decisions](#guardian-decisions) |
+| 5 | `set_recovery` | 1: list of [guardian commitments](#hidden-guardians); 2: threshold; 3: delay in seconds; 4: list of sealed guardian records; 5: guardian public key; 6: recovery wraps of the current encryption key; 7: id of the policy this changes (absent in genesis); 8: controller: the root key that may change this policy, only when it names no guardians (absent in genesis, where the genesis root controls) | see [Guardian decisions](#guardian-decisions) |
 | 6 | `recover` | 1: new root key; 2: list of signing keys to keep; 3: link key of the device that will receive shares; 4: id of the policy it acts under; 5: recovery public key of the new root | the new root key |
-| 7 | `endorse` | 1: identity id; 2: id of a decision in that identity's log | any key of the guardian, in the **guardian's own log** |
-| 8 | `confirm` | 1: identity id; 2: id of a decision in that identity's log; 3: sealed share (recoveries only) | any key of the guardian, in the **guardian's own log** |
+| 7 | `endorse` | 1: id of a decision in the guarded identity's log; 2: position of the guardian's commitment; 3: its salt | any key of the guardian, in the **guardian's own log** |
+| 8 | `confirm` | 1: id of a decision in the guarded identity's log; 2: position of the guardian's commitment; 3: its salt; 4: sealed share (recoveries only) | any key of the guardian, in the **guardian's own log** |
 | 9 | `object` | 1: id of a decision | admin or root |
 | 10 | `set_protocol` | 1: [protocol record](evolution.md#declaring-what-you-speak) | admin or root; a change of suite only inside a [root replacement](#roots) |
 
@@ -125,9 +125,9 @@ after removal makes a new key. A key's power is the one its first `add_key`
 gives it; if two concurrent entries first name the same key at different
 powers, the key never counts.
 
-The label in `add_key` is visible to everyone the log is synced with. It
-SHOULD be absent; device names belong in the account space
-([profiles.md](profiles.md#account)).
+`add_key` carries no name for the device. Device names belong in the
+account space ([profiles.md](profiles.md#account)), which only the person's
+own devices read.
 
 A **wrap** is the record `{1: target signing key, 2: fingerprint of the
 encryption key, 3: sealed record}`. The sealed record is
@@ -327,8 +327,10 @@ itself with a new phrase.
 
 ### Guardians
 
-`set_recovery` sets the **recovery policy**: guardian identities, a
-threshold, a delay, and the guardian key. When guardians are named, the
+`set_recovery` sets the **recovery policy**: guardians, a threshold, a
+delay, and the guardian key. The log names guardians only as
+[commitments](#hidden-guardians), so nobody learns who they are until they
+act. When guardians are named, the
 threshold MUST be more than half of them and no more than all of them; a
 `set_recovery` that breaks this is never in effect, and a genesis entry that
 breaks it makes the whole log invalid. The recommended default is 3 of 5
@@ -344,6 +346,43 @@ A software agent's guardians are naturally the people it acts for. An agent
 cannot meet anyone in person, so the trust its contacts place in it beyond
 its keys comes from the humans who vouch for it, and its recovery is theirs
 to decide.
+
+### Hidden guardians
+
+Whoever wants to take an identity by force goes after its guardians. So the
+log does not name them. Field 1 of `set_recovery` lists one **commitment**
+per guardian:
+
+```
+commitment = BLAKE3.keyed_hash(salt, "cardinal guardian" || guardian identity id)
+```
+
+where `salt` is 32 random bytes, different for each guardian and each
+policy. Field 4 lists, in the same order, a **guardian record** for each,
+[sealed](crypto.md#sealing) to that guardian identity's encryption key with
+context `"recovery share" || identity id`:
+
+| Key | Field |
+|---|---|
+| 1 | position `i` of this guardian in field 1, counting from 1 |
+| 2 | salt |
+| 3 | the guardian's [share](#data-recovery), when the policy has a guardian key |
+
+A sealed record does not say whom it is for. A guardian finds its own by
+trying to open each one.
+
+A guardian **reveals** itself only by acting: `endorse` and `confirm` carry
+its position and salt. A verifier checks that
+`keyed_hash(salt, "cardinal guardian" || id of the log the op is in)` equals
+the commitment at that position. An op that fails the check counts for
+nothing. Everywhere this document says "a guardian of the policy", it means
+an identity revealed this way. The model names guardians directly; the
+commitment is how a verifier learns the name ([model/rules.md](../model/rules.md)).
+
+Until a guardian acts, the identity's contacts, co-members, and hosts see
+only how many guardians there are and the threshold. The person's own
+devices know who they are, from the account space. Each guardian knows,
+because the person asked them.
 
 ### Guardian decisions
 
@@ -510,13 +549,11 @@ Shares use Shamir secret sharing over GF(2^8) with the reduction polynomial
 x^8 + x^4 + x^3 + x + 1, as in SLIP-0039. Each of the 32 bytes of `g` is the
 constant term of its own random polynomial of degree threshold − 1.
 Guardian `i`, counting from 1 in the order of field 1, receives the share
-`{1: i, 2: the 32 polynomial values at x = i}`. Field 4 lists one share per
-guardian, in the same order, each [sealed](crypto.md#sealing) to that
-guardian identity's encryption key with context
-`"recovery share" || identity id`. A guardian whose own encryption key
-changes later still opens its share, through its own key chain.
+`{1: i, 2: the 32 polynomial values at x = i}`, as field 3 of its
+[guardian record](#hidden-guardians). A guardian whose own encryption key
+changes later still opens its record, through its own key chain.
 
-A guardian's `confirm` of a recovery carries, in field 3, their share sealed
+A guardian's `confirm` of a recovery carries, in field 4, their share sealed
 to the link key named in the `recover` entry, with the same context. Shares
 are released only by confirming, so no share leaves a guardian before the
 wait is over. The new device collects the shares from the guardians' logs,
@@ -531,7 +568,8 @@ former guardians cannot read anything written after. A threshold of current
 guardians acting together could read the person's data. That is the same
 trust that lets them restore the identity, and the person grants it
 knowingly. A person who would rather lose their data than extend that trust
-leaves fields 4 to 6 empty.
+leaves fields 5 and 6 empty, and leaves the shares out of the guardian
+records.
 
 **After the phrase is exposed**, the root replaces itself with a new
 phrase's root, whose recovery public key takes effect at once, then appends
@@ -577,10 +615,18 @@ spread. No directory or server is involved.
 Devices MUST verify every entry's signature and evaluate the log before
 trusting any key in it.
 
-A log is not secret from anyone it is synced with. They see the guardian
-identities, the threshold, and how many keys the identity has. Verifiers
-need each guardian's log, where confirmations live; the identity's hosts
-SHOULD store those logs.
+A log is not secret from anyone it is synced with. They see how many keys
+the identity has and their powers, how many guardians it has and the
+threshold, and the shape of its history. They do not see device names,
+which are not in the log, or who the guardians are
+([Hidden guardians](#hidden-guardians)).
+
+Confirmations live in guardians' logs, which a verifier would otherwise not
+know to fetch. Guardian software therefore delivers each `endorse` and
+`confirm`, with the guardian's log up to it, to the guarded identity's
+devices and hosts, which add those entries to the set synced under the
+identity's label. A verifier receives them with the log, and learns who a
+guardian is only from a guardian that has acted.
 
 ## Display names
 

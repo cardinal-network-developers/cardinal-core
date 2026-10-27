@@ -923,3 +923,28 @@ leak one.
 
 **Cost.** Isolation is only as good as the platform's sandbox. Agents that
 verify entries learn their co-members' identity logs.
+
+---
+
+### D44. Reveal a field only to those who need it, only when it is used
+
+**Choice.** The identity log names guardians only by salted commitments; a
+guardian is revealed only by its own `endorse` or `confirm`, which carries
+the salt. Device names are not in the log at all. Identity entries carry no
+time. A [table](architecture.md#who-sees-what) states what each party sees.
+
+**Replaces.** Guardian identity ids in `set_recovery`, visible to everyone
+the log was synced with; the display label in `add_key`; and a time on every
+identity entry.
+
+**Why.** Metadata invites attacks outside the protocol. Anyone who wants to
+take an identity by force goes after its guardians; anyone tracking a person
+learns from when they change devices. Hiding these is not a cryptographic
+guarantee, since a guardian can always be found some other way, but it
+stops many attacks from starting. Verification never needed them: a
+commitment is checked when the guardian acts, which is the only time its
+identity matters.
+
+**Cost.** Confirmations must be delivered with the guarded identity's log,
+since verifiers no longer know which guardians' logs to fetch. The number of
+guardians and the threshold stay visible.
