@@ -57,10 +57,11 @@ else.
 ## Post-quantum signatures
 
 When forging Ed25519 becomes plausible, a new suite adds ML-DSA or SLH-DSA
-signatures. Each identity moves with `set_suite`, a
-[replacement](spec/identity.md#roots) of the root: an entry signed by the
-old root key, carrying a signature by the new root key over the entry's
-other contents, as `add_key` carries a proof of possession. Larger signatures make entries larger, which matters only for
+signatures, as a new base protocol ([evolution.md](spec/evolution.md)).
+Each identity moves with a [replacement](spec/identity.md#roots) of the
+root carrying `set_protocol`: an entry signed by the old root key, carrying
+a signature by the new root key over the entry's other contents, as
+`add_key` carries a proof of possession. Larger signatures make entries larger, which matters only for
 mailbox envelopes. Those may then carry heads messages instead of entries.
 
 ## Software distribution
@@ -69,7 +70,10 @@ Applications and updates are published in public spaces by their authors.
 Devices follow the publishers they trust. An update is a new file in that
 space, and installing it is a local decision. No store and no special
 update channel are involved. A device may prefer copies already held by its
-contacts' hosts.
+contacts' hosts. Protocol extensions travel the same way, through
+[protocol publishers](spec/evolution.md#who-decides-which-extensions-to-adopt);
+what remains to specify is the layout of a publisher's space and how a
+device matches implementations to extension names.
 
 ## Search and discovery
 

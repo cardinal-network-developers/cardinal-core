@@ -26,7 +26,7 @@ with exactly one signature.
 | 2 | parents | list of bytes(32) | ids of entries this one follows; absent in genesis, otherwise non-empty |
 | 3 | ops | list of op records | applied in list order |
 | 4 | time | uint | author's clock, milliseconds since 1970; display only, never used for ordering or security |
-| 5 | suite | uint | genesis only; `1` for [suite 1](crypto.md#suite-1) |
+| 5 | protocol | record | genesis only: the [protocol record](evolution.md#declaring-what-you-speak) this identity speaks; its base fixes the suite, [suite 1](crypto.md#suite-1) for this specification |
 
 - The **identity id** is the id of the genesis entry.
 - The **signer** of an entry is the key of its one signature. A `recover`
@@ -102,7 +102,7 @@ Each op is a record whose key `0` is the op number.
 | 7 | `endorse` | 1: identity id; 2: id of a decision in that identity's log | any key of the guardian, in the **guardian's own log** |
 | 8 | `confirm` | 1: identity id; 2: id of a decision in that identity's log; 3: sealed share (recoveries only) | any key of the guardian, in the **guardian's own log** |
 | 9 | `object` | 1: id of a decision | admin or root |
-| 10 | `set_suite` | defined by the suite being adopted | root, [replacing itself](#roots) |
+| 10 | `set_protocol` | 1: [protocol record](evolution.md#declaring-what-you-speak) | admin or root; a change of suite only inside a [root replacement](#roots) |
 
 `endorse` and `confirm` are written by guardians about *another* identity,
 in their own logs, so that their own revocation rules govern them and every
@@ -146,8 +146,9 @@ An identity has one root key. The set of roots changes in only three ways:
 - the genesis entry adds the first root;
 - a root **replaces itself**: an entry signed by root `R` whose ops are
   exactly an `add_key` of a new root, with its proof and the new phrase's
-  recovery public key, and a `remove_key` of `R`, and nothing else. A new
-  phrase, and a new suite, are replacements;
+  recovery public key, and a `remove_key` of `R`, and at most one
+  `set_protocol`, and nothing else. A new phrase, and a new suite, are
+  replacements;
 - a [recovery](#recovery) in effect.
 
 No entry may add a root in any other way, and no root may remove another.

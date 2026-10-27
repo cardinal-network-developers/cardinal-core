@@ -39,6 +39,7 @@ separate processes.
 | K | A key removed by a recovery gains nothing: everything valid it signed is in the recovery's past, and no decision it signed after is in effect, except a change it only proposed that guardians approved |
 | E | Voiding every space entry of one identity never makes valid an entry under a membership of equal or higher role than any it held; a non-member's entries never matter |
 | F | Every entry by an author who is not frozen that is valid when no one is treated as frozen is valid |
+| X | With [extensions](../spec/evolution.md): a verifier that knows every extension used gets the plain result; for any one set of known extensions, the result does not depend on entry order; a verifier stops only at valid entries using a critical extension it lacks |
 
 Each fix for the cold review of this program (V1–V11) was checked by
 putting the flaw back and confirming that the fuzzer or a scenario finds
@@ -50,7 +51,9 @@ tree; honest owners never drop all their guardians in the H histories,
 because without guardians a phrase thief may freeze the identity by
 design; E judges one identity at a time, so collusion between two lower
 members is not covered; and the hash-seed check compares a sample of
-twenty histories of each kind.
+twenty histories of each kind. Extensions are modeled in identity logs
+only; spaces stop at opaque entries the same way, but the model does not
+evaluate that.
 
 ## Why a program
 

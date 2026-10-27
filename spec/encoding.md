@@ -70,9 +70,12 @@ The first field of every stored or transferable object is key `0`, the
 **kind**. Messages on a link service also use key `0`, for the message's op
 within that service; the service, named when the stream opens, says which
 table applies. Core
-kinds are small unsigned integers listed in the registry below. Application
-kinds are 32-byte bytes values: the BLAKE3 hash of a schema document written
-by the application author. No registry is needed for application kinds.
+kinds are small unsigned integers listed in the registry below, fixed by the
+frozen base protocol. Every other kind is a 32-byte bytes value: the BLAKE3
+hash of the document that defines it, whether an application's schema or a
+[protocol extension](evolution.md). Op records follow the same rule: key `0`
+is a small integer defined by the base, or the 32-byte name of an extension.
+No registry is needed for anything but the base, and the base never grows.
 
 ## Unknown fields
 
@@ -140,7 +143,7 @@ A tool that knows the schema MAY show field names instead of keys
 | 11 | envelope | [hosts.md](hosts.md#envelopes) |
 | 12 | bundle | [sync.md](sync.md#sneakernet-and-delay-tolerant-carriage) |
 | 13 | canonical state | [state.md](state.md#canonical-state) |
-| 14–63 | reserved for this specification | |
+| 14–63 | reserved for this specification, until the base is frozen | |
 
 Operation records inside entries carry their own small `op` numbers, defined
 in the document that defines the entry.

@@ -348,6 +348,60 @@ def check_identity(b, rng, stats):
     stats["entries"] += len(w.entries)
 
 
+# ------------------------------------------------------------ evolution
+
+def check_evolution(b, rng, stats):
+    """Sprinkle extension ops over a finished history, then check: a verifier
+    that knows every extension used gets the plain result; for any one
+    protocol set, the result does not depend on entry order; and a verifier
+    stalls only at valid entries using a critical extension it lacks."""
+    w = b.w
+    keys_seen = sorted({e.signer for e in w.entries.values() if e.log == "I"})
+    log = sorted(x for x, e in w.entries.items() if e.log == "I")
+    hashes = ("X", "Y", "Z")
+    pre = evaluate_identity(w, "I", frozenset(w.entries))
+    live = sorted(k for (k,) in pre["effective"]) or keys_seen
+    strong = sorted(k for (k, p) in pre["kpow"] if (k,) in pre["effective"] and p >= 2) or live
+    n = 0
+    if rng.random() < 0.7:
+        x = b.write("I", "x00", rng.choice(strong), [("protocol", hashes)])
+        log.append(x)
+    for _ in range(rng.randint(1, 4)):
+        n += 1
+        parents = [rng.choice(log)] if rng.random() < 0.5 else list(b.heads("I"))
+        k = rng.choice(keys_seen if rng.random() < 0.3 else strong)
+        r = rng.random()
+        if r < 0.3:
+            ops = [("protocol", tuple(rng.sample(hashes, rng.randint(1, 2))))]
+        elif r < 0.8:
+            ops = [("ext", rng.choice(hashes), True)]
+        else:
+            ops = [("ext", rng.choice(hashes), False)]
+        x = b.write("I", f"x{n:02d}", k, ops, parents)
+        log.append(x)
+        if rng.random() < 0.5:
+            b.write("I", f"y{n:02d}", rng.choice(keys_seen), [("add", f"KX{n}", 1)], [x])
+            log.append(f"y{n:02d}")
+    full = frozenset(w.entries)
+    plain = evaluate_identity(w, "I", full)
+    used = frozenset(op[1] for e in w.entries.values() for op in e.ops if op[0] == "ext")
+    every = evaluate_identity(w, "I", full, used)
+    need(not every["stalled"], "X", "a verifier knowing every extension stalled")
+    for k in ("valid", "effective", "frozen"):
+        need(plain[k] == every[k], "X", f"{k} differs for a verifier knowing every extension")
+    known = frozenset(h for h in hashes if rng.random() < 0.5)
+    r1 = evaluate_identity(w, "I", full, known)
+    w2 = reorder(w, rng)
+    r2 = evaluate_identity(w2, "I", frozenset(w2.entries), known)
+    for k in ("valid", "effective", "root_eff", "frozen", "stalled"):
+        need(r1[k] == r2[k], "D", f"{k} differs with entry order for one protocol set")
+    for x in r1["stalled"]:
+        need((x,) in plain["valid"], "X", f"stalled at {x}, which is not valid")
+        need(any(op[0] == "ext" and op[2] and op[1] not in known for op in w.entries[x].ops),
+             "X", f"stalled at {x}, which uses no unknown critical extension")
+    stats["stalled"] += bool(r1["stalled"])
+
+
 # ------------------------------------------------------------ honest guardians
 
 def honest_identity_history(rng):
@@ -1005,7 +1059,8 @@ def main():
             print(f"{name} rules are not stratified:", *errs, sep="\n  ")
             return 1
     stats = dict(entries=0, frozen=0, contested=0, recovered=0, subsets=0,
-                 space_entries=0, space_valid=0, space_frozen=0, counterfactuals=0)
+                 space_entries=0, space_valid=0, space_frozen=0, counterfactuals=0,
+                 stalled=0)
     web = dict(entries=0, frozen=0, contested=0, recovered=0, subsets=0, depth=0,
                conf=0, conf_frozen=0, conf_contested=0, conf_recovering=0)
     hon = dict(entries=0, recovered=0, decided=0, contested=0)
@@ -1015,6 +1070,7 @@ def main():
         b = identity_history(rng)
         try:
             check_identity(b, rng, stats)
+            check_evolution(b, rng, stats)
         except Failure as f:
             failures += 1
             print(f"identity case {i}: {f}")
@@ -1048,7 +1104,7 @@ def main():
         print("D: results differ between Python hash seeds")
     print(f"identity: {n_id} histories, {stats['entries']} entries, {stats['subsets']} subsets; "
           f"{stats['frozen']} frozen, {stats['contested']} contested, "
-          f"{stats['recovered']} recovered")
+          f"{stats['recovered']} recovered; {stats['stalled']} stalled for a partial protocol set")
     print(f"honest guardians: {n_hon} histories, {hon['entries']} entries, "
           f"{hon['decided']} decisions in effect, {hon['recovered']} recovered, "
           f"{hon['contested']} contested, 0 frozen allowed")

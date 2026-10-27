@@ -49,8 +49,8 @@ which comes from guardians' logs.
 | `add(E,K,P)` | E contains `add_key` of K with power P (1 device, 2 admin, 3 root) |
 | `readd(E)` | E contains `add_key` of a key already named in E's causal past, by an `add_key` or as a recovery's new root |
 | `rem(E,K)` | E contains `remove_key` of K |
-| `selfrep(E,R,N)`, `is_selfrep(E)` | E is a root replacement: signed by R, its ops are exactly `add_key` of root N and `remove_key` of R |
-| `badops(E,P)` | E contains an op that a key of power P may not perform ([table](../spec/identity.md#operations)), adds a key at a power above P or a root, contains `readd`, or is a decision. Whether a removal goes down in power is decided by the rules (`bad`) |
+| `selfrep(E,R,N)`, `is_selfrep(E)` | E is a root replacement: signed by R, its ops are exactly `add_key` of root N and `remove_key` of R, and at most one `set_protocol` |
+| `badops(E,P)` | E contains an op that a key of power P may not perform ([table](../spec/identity.md#operations)), adds a key at a power above P or a root, contains `readd`, is a decision, or uses a critical [extension](../spec/evolution.md) that no `set_protocol` in its causal past declares (critical extensions and `set_protocol` need admin power). Whether a removal goes down in power is decided by the rules (`bad`) |
 | `policy(E)` | E carries `set_recovery` |
 | `change(D,P)` | D is a `set_recovery` after genesis, naming P as the policy it changes |
 | `guardian(P,G)`, `threshold(P,T)`, `unguarded(P)` | the guardians and threshold of policy P; P names no guardians |
@@ -275,6 +275,13 @@ current_key(E) :- sek_ok(E), not newer_key(E).
   this). The second rule needs care: it compares the controller's two
   replacements against changes of the policy in their own causal pasts,
   which depend only on the shape of entries once the policy is in effect.
+- **Extensions.** An op from a critical [extension](../spec/evolution.md)
+  has no effect in these rules; it matters only through `badops` (undeclared,
+  or below admin power). A verifier that lacks the extension evaluates the
+  program once, takes the valid entries that use it as *opaque*, and
+  evaluates again without them and their descendants (`evaluate_identity`
+  with `known`). Each pass is this program, so each has one result; the two
+  together give one result for each set of known extensions.
 
 ## Spaces
 

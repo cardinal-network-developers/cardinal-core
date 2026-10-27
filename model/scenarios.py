@@ -851,6 +851,74 @@ def V11_memberships_are_named_by_entry_and_position():
     r = b.sp("S")
     assert {("e1#0",), ("e1#1",)} <= r["member"] and ("w",) in r["valid"]
 
+
+# ------------------------------------------------------------ evolution
+
+@scenario
+def X1_unknown_critical_extension_stalls_only_the_verifier_who_lacks_it():
+    b = Builder()
+    guarded(b)
+    b.write("I", "decl", "A0", [("protocol", ("X",))])
+    b.write("I", "use", "A0", [("ext", "X", True)])
+    b.write("I", "after", "A0", [("add", "D1", 1)])
+    knows = b.ident("I", known=frozenset({"X"}))
+    lacks = b.ident("I", known=frozenset())
+    assert "D1" in keys(knows) and not knows["stalled"], knows
+    assert "D1" not in keys(lacks) and lacks["stalled"] == {"use"}, lacks
+    assert "D0" in keys(lacks)            # what came before still stands
+
+
+@scenario
+def X2_undeclared_critical_extension_is_invalid():
+    b = Builder()
+    guarded(b)
+    b.write("I", "use", "A0", [("ext", "X", True)])
+    r = b.ident("I", known=frozenset())
+    assert ("use",) not in r["valid"] and not r["stalled"], r
+
+
+@scenario
+def X3_a_device_key_cannot_stall_its_identity():
+    b = Builder()
+    guarded(b)
+    b.write("I", "decl", "A0", [("protocol", ("X",))])
+    b.write("I", "use", "D0", [("ext", "X", True)])
+    b.write("I", "after", "A0", [("add", "D1", 1)])
+    r = b.ident("I", known=frozenset())
+    assert not r["stalled"] and "D1" in keys(r), r
+
+
+@scenario
+def X4_removing_the_signer_lifts_the_stall():
+    b = Builder()
+    guarded(b)
+    b.write("I", "decl", "A0", [("protocol", ("X",))])
+    b.write("I", "add", "R0", [("add", "A1", 2)], parents=["decl"])
+    b.write("I", "use", "A1", [("ext", "X", True)], parents=["add"])
+    b.write("I", "rm", "R0", [("rem", "A1")], parents=["add"])
+    r = b.ident("I", known=frozenset())
+    assert not r["stalled"] and "A1" not in keys(r), r
+
+
+@scenario
+def X5_unknown_ignorable_extension_is_skipped():
+    b = Builder()
+    guarded(b)
+    b.write("I", "use", "D0", [("ext", "Y", False)])
+    b.write("I", "after", "A0", [("add", "D1", 1)])
+    r = b.ident("I", known=frozenset())
+    assert ("use",) in r["valid"] and not r["stalled"] and "D1" in keys(r), r
+
+
+@scenario
+def X6_a_root_replacement_may_change_the_protocol():
+    b = Builder()
+    guarded(b)
+    b.write("I", "rep", "R0", [("add", "R1", 3), ("protocol", ("S2",)), ("rem", "R0")])
+    r = b.ident("I")
+    assert roots(r) == {"R1"}, r
+
+
 def main():
     failed = 0
     for fn in SCENARIOS:

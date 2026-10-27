@@ -870,3 +870,30 @@ worked depended on Python's hash seed. Fixing power by the entries' shape
 removes both.
 
 **Cost.** A device that returns after removal needs a new key.
+
+---
+
+### D42. The core is frozen; extensions are named by hash
+
+**Choice.** The small-integer kinds, ops, and fields are one frozen base
+document, named by its hash. Everything new is an extension, named by the
+hash of its document and used in place of a number. Each extension is
+critical or ignorable. A verifier that meets a valid entry using a critical
+extension it does not know stops trusting that log from there on, and says
+so. Identities and spaces declare what they speak with `set_protocol`, which
+replaces `set_suite`. Devices adopt extensions endorsed by publishers their
+person follows ([evolution.md](spec/evolution.md)).
+
+**Replaces.** A registry of core kinds that someone would have to keep, and
+`set_suite`.
+
+**Why.** Once the project is open, nobody should be its arbiter. Numbers
+need a registrar; hashes do not. Two communities extending the core
+independently must never give one number two meanings, because the result
+would be identity logs that are valid in one place and invalid in another,
+with no one told. Hash names make collisions impossible and disagreement
+visible.
+
+**Cost.** Thirty-two bytes per extension op. Agreement on validity holds
+among verifiers that know the same extensions, not across all of them; one
+that knows less accepts less, and says so.

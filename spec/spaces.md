@@ -163,7 +163,7 @@ membership it is written under.
 
 Readers receive epoch keys and read; the only entries they write are their
 own reach node, `keep` ops, and their own leaving. Writers also append
-application ops and rotate epochs. Owners also change policy and
+application ops and rotate epochs. Owners also change policy and protocol, and
 [succeed](#succession) the space.
 
 As in identity logs, **no member can end the membership of another of equal
@@ -182,7 +182,7 @@ ones).
 
 | Op | Name | Fields |
 |---|---|---|
-| 1 | `start` | 1: profile (uint or bytes(32)); 2: policy; 3: id of the space this one [succeeds](#succession), if any; 4: initial state: [blob reference](blobs.md#references) to a [canonical state](state.md#canonical-state). Genesis only. |
+| 1 | `start` | 1: profile (uint or bytes(32)); 2: policy; 3: id of the space this one [succeeds](#succession), if any; 4: initial state: [blob reference](blobs.md#references) to a [canonical state](state.md#canonical-state); 5: [protocol record](evolution.md#declaring-what-you-speak). Genesis only. |
 | 2 | `add_member` | 1: identity id; 2: role. Creates a [membership](#memberships). |
 | 3 | | reserved |
 | 4 | `remove_member` | 1: membership id |
@@ -190,6 +190,7 @@ ones).
 | 6 | `set_policy` | 1: policy |
 | 7 | `keep` | 1: a removed signing key of the author; 2: list of entry ids by that key ([Authors](#authors)) |
 | 8 | `succeed` | 1: id of the successor space ([Succession](#succession)) |
+| 9 | `set_protocol` | 1: [protocol record](evolution.md#declaring-what-you-speak). Owners only. |
 
 **Policy** is a record:
 

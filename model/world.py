@@ -158,10 +158,18 @@ def graph_facts(entries, prefix=""):
 
 ALLOWED = {
     # power -> op names a key of that power may sign (decisions excepted)
-    3: {"add", "rem", "sek", "object", "confirm", "policy"},
-    2: {"add", "rem", "sek", "object", "confirm"},
-    1: {"confirm"},
+    3: {"add", "rem", "sek", "object", "confirm", "policy", "protocol", "exti", "extc"},
+    2: {"add", "rem", "sek", "object", "confirm", "protocol", "exti", "extc"},
+    1: {"confirm", "exti"},
 }
+
+
+def op_name(op):
+    """An extension op is ("ext", hash, critical); the rules see only whether
+    it is critical. Its meaning is the extension's, outside the model."""
+    if op[0] == "ext":
+        return "extc" if op[2] else "exti"
+    return op[0]
 
 
 def identity_facts(world, ident, ids):
@@ -180,7 +188,7 @@ def identity_facts(world, ident, ids):
     for x in sorted(entries):
         e = entries[x]
         f["signer"].add((x, e.signer))
-        names = [op[0] for op in e.ops]
+        names = [op_name(op) for op in e.ops]
         named_before = set().union(*(names_of[a] for a in anc[x])) if anc[x] else set()
         readd = any(op[0] == "add" and op[1] in named_before for op in e.ops)
         if readd:
@@ -216,13 +224,17 @@ def identity_facts(world, ident, ids):
                     f["keeps"].add((x, k))
             elif op[0] == "sek":
                 f["sek"].add((x,))
+        # a critical extension is used only after a set_protocol declares it
+        declared = {h for a in anc[x] | {x} for op in entries[a].ops
+                    if op[0] == "protocol" for h in op[1]}
+        undeclared = any(op[0] == "ext" and op[2] and op[1] not in declared for op in e.ops)
         decision = "recover" in names or "policy" in names
         if decision and e.parents and len(e.ops) != 1:
             f["bad_decision"].add((x,))    # a decision is alone in its entry
         if any(op[0] == "recover" and op[1] in named_before for op in e.ops):
             f["bad_decision"].add((x,))    # a new root is a new key
         # root replacement: exactly add root N and remove the signer
-        if (sorted(names) == ["add", "rem"] and not readd
+        if (sorted(names) in (["add", "rem"], ["add", "protocol", "rem"]) and not readd
                 and any(op[0] == "add" and op[2] == 3 for op in e.ops)
                 and any(op[0] == "rem" and op[1] == e.signer for op in e.ops)):
             n = next(op[1] for op in e.ops if op[0] == "add")
@@ -232,7 +244,7 @@ def identity_facts(world, ident, ids):
         # decisions are judged only as decisions, never as ordinary entries;
         # whether a removal targets a lower power is decided by the rules
         for p in (1, 2, 3):
-            bad = decision or readd or any(n not in ALLOWED[p] for n in names)
+            bad = decision or readd or undeclared or any(n not in ALLOWED[p] for n in names)
             for op in e.ops:
                 if op[0] == "add" and (op[2] >= 3 or op[2] > p):
                     bad = True            # roots are added only by replacement
@@ -241,7 +253,7 @@ def identity_facts(world, ident, ids):
     return f
 
 
-def confirm_facts(world, ident, ids):
+def confirm_facts(world, ident, ids, known=None):
     """confirm_ok(G, D): a confirmation of D, judged in G's log as of its own
     causal past."""
     out = set()
@@ -253,7 +265,7 @@ def confirm_facts(world, ident, ids):
         for op in e.ops:
             if op[0] == "confirm" and op[1] in decisions:
                 past = world.closure([c])
-                r = evaluate_identity(world, e.log, past)
+                r = evaluate_identity(world, e.log, past, known)
                 if (c,) in r["valid"] and not r["frozen"]:
                     out.add((e.log, op[1]))
     return out
@@ -264,7 +276,7 @@ _active = []                       # evaluations in progress, outermost first
 depth = {"max": 0}
 
 
-def evaluate_identity(world, ident, ids):
+def evaluate_identity(world, ident, ids, known=None):
     """Evaluate identity `ident` over the causally closed set `ids`.
 
     Judging a confirmation evaluates the guardian's log over the
@@ -276,7 +288,7 @@ def evaluate_identity(world, ident, ids):
     """
     ids = frozenset(x for x in ids if x in world.entries)
     own = frozenset(x for x in ids if world.entries[x].log == ident)
-    key = (world.serial, ident, ids)
+    key = (world.serial, ident, ids, known)
     if key in _cache:
         return _cache[key]
     assert key not in _active, f"identity evaluation of {ident} recurs"
@@ -284,7 +296,7 @@ def evaluate_identity(world, ident, ids):
     depth["max"] = max(depth["max"], len(_active))
     try:
         f = identity_facts(world, ident, own)
-        f["confirm_ok"] = confirm_facts(world, ident, ids)
+        f["confirm_ok"] = confirm_facts(world, ident, ids, known)
     finally:
         _active.pop()
     rel = evaluate(PROGRAMS["identity"], f)
@@ -294,6 +306,20 @@ def evaluate_identity(world, ident, ids):
         "key_added", "votes", "suspended", "kpow")}
     r["frozen"] = bool(rel.get("frozen"))
     r["contested"] = bool(rel.get("contested"))
+    r["stalled"] = set()
+    # A valid entry using a critical extension this verifier does not know
+    # cannot be judged. The verifier stops there: it evaluates again without
+    # that entry and everything descending from it (evolution.md).
+    if known is not None:
+        opaque = {x for (x,) in r["valid"] if any(
+            op[0] == "ext" and op[2] and op[1] not in known
+            for op in world.entries[x].ops)}
+        if opaque:
+            entries = {x: world.entries[x] for x in own}
+            anc = ancestry(entries)
+            cut = {x for x in own if x in opaque or anc[x] & opaque}
+            r = dict(evaluate_identity(world, ident, ids - cut, known))
+            r["stalled"] = opaque
     _cache[key] = r
     return r
 
@@ -459,8 +485,8 @@ class Builder:
         self.last[space] = name
         return name
 
-    def ident(self, log, ids=None):
-        return evaluate_identity(self.w, log, frozenset(ids or self.w.entries))
+    def ident(self, log, ids=None, known=None):
+        return evaluate_identity(self.w, log, frozenset(ids or self.w.entries), known)
 
     def sp(self, space):
         return evaluate_space(self.w, space, [x for x, e in self.w.entries.items()

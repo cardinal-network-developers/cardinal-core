@@ -10,8 +10,9 @@ primitives, but compositions are where mistakes happen.
 Each identity declares one suite in its genesis entry. Devices never
 negotiate algorithms on the wire: negotiation is attack surface, a
 fingerprint, and complexity. An identity moves to a new suite with a
-`set_suite` operation in its log ([identity.md](identity.md)), and its
-contacts follow when they read the log.
+[root replacement](identity.md#roots) carrying `set_protocol` with a new
+base, and its contacts follow when they read the log
+([evolution.md](evolution.md)).
 
 ## Suite 1
 
