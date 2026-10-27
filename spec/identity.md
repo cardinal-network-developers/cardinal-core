@@ -85,7 +85,8 @@ sealing secrets to that device.
 
 There is no partial device. A device that should see only some data, such as
 a shared television or a software agent, is its own identity, added as a
-member to the spaces it should see ([spaces.md](spaces.md)).
+member to the spaces it should see ([spaces.md](spaces.md),
+[apps.md](apps.md#agents-normative-where-marked)).
 
 ## Operations
 

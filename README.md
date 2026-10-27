@@ -33,6 +33,7 @@ before anything is frozen.
 | [hosts.md](spec/hosts.md) | mailbox, rendezvous, relay, storage, discovery |
 | [contact.md](spec/contact.md) | invitations, pairing, introductions |
 | [profiles.md](spec/profiles.md) | account, files, relationship, group, public |
+| [apps.md](spec/apps.md) | applications without keys; agents with their own identity |
 | [evolution.md](spec/evolution.md) | extensions named by hash; critical and ignorable; publishers |
 
 6. [model/](model/): the authority rules as a checked logic program, which

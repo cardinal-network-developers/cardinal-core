@@ -183,7 +183,7 @@ ones).
 | Op | Name | Fields |
 |---|---|---|
 | 1 | `start` | 1: profile (uint or bytes(32)); 2: policy; 3: id of the space this one [succeeds](#succession), if any; 4: initial state: [blob reference](blobs.md#references) to a [canonical state](state.md#canonical-state); 5: [protocol record](evolution.md#declaring-what-you-speak). Genesis only. |
-| 2 | `add_member` | 1: identity id; 2: role. Creates a [membership](#memberships). |
+| 2 | `add_member` | 1: identity id; 2: role; 3: agent of: the identity this member acts for ([apps.md](apps.md#agents-normative-where-marked)), display only. Creates a [membership](#memberships). |
 | 3 | | reserved |
 | 4 | `remove_member` | 1: membership id |
 | 5 | `rotate` | 1: list of `{1: epoch id, 2: key}`: the keys of every epoch this one supersedes, only if history is shared |

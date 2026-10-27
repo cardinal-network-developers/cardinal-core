@@ -7,7 +7,8 @@ A **profile** says what a space is for: which node kinds exist, which fields
 they have, and who may change what. The core profiles are listed here. An
 application can define its own profile, named by the hash of its schema
 document, and it gets sync, history, encryption, membership, and backup
-without writing any of them.
+without writing any of them. How an application reaches its spaces without
+seeing anything else is in [apps.md](apps.md).
 
 | Profile | Value | Members |
 |---|---|---|

@@ -897,3 +897,29 @@ visible.
 **Cost.** Thirty-two bytes per extension op. Agreement on validity holds
 among verifiers that know the same extensions, not across all of them; one
 that knows less accepts less, and says so.
+
+---
+
+### D43. Applications hold no keys; agents hold their own
+
+**Choice.** On each device one Cardinal service holds keys, logs, and
+spaces. Applications reach only the spaces the person grants them, by
+choosing in a picker the service draws, and see members as opaque handles.
+Their writes are signed by the device, as the person. An application that
+must act on its own is an agent: its own identity, a member only where
+added, shown as its principal's agent when the principal added it
+([apps.md](spec/apps.md)).
+
+**Replaces.** Nothing in this specification; it completes D12, which
+dropped scopes and said apps could be given their own identity.
+
+**Why.** The question is what a poorly trusted application, such as a
+mini-game with friends, can learn. Scopes answered inside the protocol, at
+great cost. The powerbox answers at the boundary the person can see, and
+the protocol only ever sees an identity writing to a space. Friends connect
+through the ordinary co-member rules, so nothing new is needed for the game
+to be played together. Most applications never hold a key, so they cannot
+leak one.
+
+**Cost.** Isolation is only as good as the platform's sandbox. Agents that
+verify entries learn their co-members' identity logs.

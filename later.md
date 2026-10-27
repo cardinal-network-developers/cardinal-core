@@ -75,6 +75,18 @@ contacts' hosts. Protocol extensions travel the same way, through
 what remains to specify is the layout of a publisher's space and how a
 device matches implementations to extension names.
 
+## Agents that stand on their own
+
+Today an agent's trust beyond its keys comes from the humans who vouch for
+it, and its guardians are its principals ([apps.md](spec/apps.md#agents-normative-where-marked)).
+A person can protect their keys physically and meet their friends; an agent
+can do neither. If agents come to run on hardware that binds a key to one
+agent and attests to it, such as a dedicated chip per agent, an agent could
+hold an identity whose root it protects itself. That would be an
+[extension](spec/evolution.md) defining a new kind of key and what its
+attestation proves. Until then, agents are vouched for, not trusted on
+their own.
+
 ## Search and discovery
 
 Finding people and public spaces without global names happens through the
