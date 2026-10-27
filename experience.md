@@ -62,6 +62,13 @@ Key, certificate, scope, epoch, entry, blob, chunk, hash, session, host
 - **Someone has my words.** The software notices the conflicting change,
   says so plainly, and walks the person through asking guardians to settle
   it.
+- **Beyond recovery.** With no words, no device, and no guardians able to
+  act, nothing can prove the old identity is yours. You make a new one and
+  ask each contact, by whatever human means you share, to replace the old
+  one with it. Their software then stops trusting the old identity and
+  offers to copy your shared spaces' contents into new spaces with you.
+  This is slow and manual by design: anything faster would also work for a
+  thief.
 - **Starting fresh.** A space whose history has grown too long, or a
   friendship that has gone wrong, is succeeded by a new space. What should
   carry over does; the old one can be archived or dropped.

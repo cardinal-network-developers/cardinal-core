@@ -87,3 +87,28 @@ gives disappearing conversations to those who want them, without imposing
 that on everyone. What remains to specify is the policy field and how
 members' software agrees on the schedule. See
 [decisions.md](decisions.md) D4.
+
+## Starting over
+
+Some losses are beyond recovery: the words are gone, no device survives,
+and the guardians cannot reach a threshold, or the identity is contested in
+a way only they could settle and they will not. Physics offers no proof of
+who the person is, so the protocol offers none either. The person starts a
+new identity, and each contact replaces the old one by hand, after checking
+by whatever human means they trust.
+
+The core already allows the essentials: a contact can mark an identity as
+no longer trusted in their account space, and any member can copy a space's
+current state into a new space with new members. What remains is tooling to
+make the process bearable:
+
+- a "replaced by" note a contact can attach to the old identity, so their
+  devices show the new one wherever the old one appeared;
+- offering to re-share, into new spaces, the data contacts held in common
+  with the old identity;
+- if the person still has a working device of a fully compromised
+  identity, exporting their own data from it and importing it under the new
+  one.
+
+The corner cases are many. None needs protocol support beyond what exists,
+and none should be automated so far that a thief could use it.
