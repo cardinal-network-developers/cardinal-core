@@ -65,6 +65,9 @@ class World:
         assert e.id not in self.entries, e.id
         for p in e.parents:
             assert p in self.entries and self.entries[p].log == e.log, (e.id, p)
+        for r in self.refs(e):
+            # a reference is a hash: it can only name an entry that exists
+            assert r in self.entries, (e.id, r)
         self.entries[e.id] = e
         self._kind.setdefault(e.log, kind)
 
@@ -237,17 +240,33 @@ def confirm_facts(world, ident, ids):
 
 
 _cache = {}
+_active = []                       # evaluations in progress, outermost first
+depth = {"max": 0}
 
 
 def evaluate_identity(world, ident, ids):
-    """Evaluate identity `ident` over the causally closed set `ids`."""
+    """Evaluate identity `ident` over the causally closed set `ids`.
+
+    Judging a confirmation evaluates the guardian's log over the
+    confirmation's own causal past, which may hold confirmations of the
+    guardian's decisions by other identities, and so on. Each nested
+    evaluation of the same log is over a strictly smaller set, because hash
+    links cannot form a cycle, so the recursion ends: sets are finite, and a
+    loop would need the same evaluation to recur. The assertion checks that.
+    """
     ids = frozenset(x for x in ids if x in world.entries)
     own = frozenset(x for x in ids if world.entries[x].log == ident)
     key = (world.serial, ident, ids)
     if key in _cache:
         return _cache[key]
-    f = identity_facts(world, ident, own)
-    f["confirm_ok"] = confirm_facts(world, ident, ids)
+    assert key not in _active, f"identity evaluation of {ident} recurs"
+    _active.append(key)
+    depth["max"] = max(depth["max"], len(_active))
+    try:
+        f = identity_facts(world, ident, own)
+        f["confirm_ok"] = confirm_facts(world, ident, ids)
+    finally:
+        _active.pop()
     rel = evaluate(PROGRAMS["identity"], f)
     r = {k: rel.get(k, set()) for k in (
         "valid", "in_effect", "effective", "effective_at", "removed", "removed_at",

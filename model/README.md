@@ -9,17 +9,17 @@ The authority rules of Cardinal Core, as a program a machine can check.
 | [world.py](world.py) | Abstract entries (no bytes, no signatures), the input facts the rules read, and evaluation of identities and spaces |
 | [check.py](check.py) | Checks that the rules are stratified: one result for any set of entries |
 | [scenarios.py](scenarios.py) | One scenario per review finding that still applies, with the outcome the rules must give |
-| [fuzz.py](fuzz.py) | Random adversarial histories, checked against determinism, monotone freezing, recovery, backdating, and author properties |
+| [fuzz.py](fuzz.py) | Random adversarial histories, including identities that guard each other, checked against determinism, monotone freezing, recovery, backdating, and author properties |
 
 Python 3, standard library only. From the repository root:
 
 ```
 python3 model/check.py
 python3 model/scenarios.py
-python3 model/fuzz.py [identity-cases] [space-cases] [seed]
+python3 model/fuzz.py [identity-cases] [space-cases] [seed] [guardian-web-cases]
 ```
 
-The defaults run 1,000 of each, in a few minutes.
+The defaults run 1,000 identity and space histories and 500 guardian webs.
 
 ## Why a program
 

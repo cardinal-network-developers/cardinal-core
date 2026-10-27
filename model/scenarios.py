@@ -283,7 +283,7 @@ def U5b_keep_overrides_an_earlier_removal():
     b.write("I", "rec", "N", [("recover", "N", ("D0",), "I")])
     confirm(b, "G1", "c1", "rec")
     confirm(b, "G2", "c2", "rec")
-    b.write("I", "after", "D0", [("confirm", "nothing")])
+    b.write("I", "after", "D0", [("confirm", "G1")])
     r = b.ident("I")
     assert "D0" in keys(r) and ("after",) in r["valid"]
 
@@ -508,6 +508,105 @@ def frozen_author_writes_nothing():
     tom = b.space("S", "Tom", "aTom", head="Tom")
     b.write("Tom", "thief", "R0", [("add", "R2", 3), ("rem", "R0")], parents=["Tom"])
     assert ("S",) not in b.sp("S")["valid"]
+
+
+# ------------------------------------------------------------ guardian webs
+
+def mutual(b):
+    """A and B guard each other; G guards both. Threshold 2 of 2."""
+    b.identity("G", "rG", admin="aG", devices=("dG",))
+    b.identity("A", "RA", admin="aA", devices=("DA",), guardians=("B", "G"), threshold=2)
+    b.identity("B", "RB", admin="aB", devices=("DB",), guardians=("A", "G"), threshold=2)
+
+
+@scenario
+def mutual_guardians_recover_concurrently():
+    b = Builder()
+    mutual(b)
+    b.write("A", "rA", "NA", [("recover", "NA", ("DA",), "A")])
+    b.write("B", "rB", "NB", [("recover", "NB", ("DB",), "B")])
+    # each confirms the other's recovery with a key its own recovery removes
+    confirm(b, "B", "cB", "rA")
+    confirm(b, "A", "cA", "rB")
+    confirm(b, "G", "cG1", "rA")
+    confirm(b, "G", "cG2", "rB")
+    for x, n, d in (("A", "NA", "DA"), ("B", "NB", "DB")):
+        r = b.ident(x)
+        assert roots(r) == {n} and keys(r) == {d} and not r["frozen"], (x, r)
+    # the same answer whichever identity is evaluated first, from scratch
+    for order in (("A", "B"), ("B", "A")):
+        c = Builder()
+        mutual(c)
+        for e in sorted(b.w.entries.values(), key=lambda e: list(b.w.entries).index(e.id)):
+            if e.id not in c.w.entries:
+                c.w.put(e, b.w._kind[e.log])
+        got = [roots(c.ident(x)) for x in order]
+        assert got == [roots(b.ident(x)) for x in order], (order, got)
+
+
+@scenario
+def mutual_guardians_confirm_after_own_recovery():
+    b = Builder()
+    mutual(b)
+    b.write("A", "rA", "NA", [("recover", "NA", ("DA",), "A")])
+    confirm(b, "B", "cB", "rA")
+    confirm(b, "G", "cG1", "rA")
+    assert roots(b.ident("A")) == {"NA"}
+    b.write("B", "rB", "NB", [("recover", "NB", (), "B")])
+    # A's kept device confirms B's recovery, and so does G
+    confirm(b, "A", "cA", "rB", signer="DA")
+    confirm(b, "G", "cG2", "rB")
+    assert roots(b.ident("B")) == {"NB"} and roots(b.ident("A")) == {"NA"}
+
+
+def race(b, x, root, parents):
+    """A phrase thief and the owner both replace root `root`."""
+    b.write(x, x + "own", root, [("add", root + "1", 3), ("rem", root)], parents)
+    b.write(x, x + "thief", root, [("add", root + "T", 3), ("rem", root)], parents)
+
+
+@scenario
+def frozen_guardian_confirmation_does_not_count():
+    b = Builder()
+    guarded(b)                                     # G1-G3 have no guardians
+    race(b, "G1", "rG1", ["G1"])
+    assert b.ident("G1")["frozen"]
+    b.write("I", "rec", "N", [("recover", "N", (), "I")])
+    confirm(b, "G1", "c1", "rec")                  # sees both sides: frozen
+    confirm(b, "G2", "c2", "rec")
+    assert not effect(b.ident("I"))
+    confirm(b, "G3", "c3", "rec")
+    assert effect(b.ident("I")) == {"rec"}
+
+
+@scenario
+def guardian_frozen_later_keeps_earlier_confirmation():
+    b = Builder()
+    guarded(b)
+    b.write("I", "rec", "N", [("recover", "N", (), "I")])
+    confirm(b, "G1", "c1", "rec")
+    confirm(b, "G2", "c2", "rec")
+    race(b, "G1", "rG1", ["G1"])                   # concurrent with c1
+    r = b.ident("I")
+    assert b.ident("G1")["frozen"] and effect(r) == {"rec"} and not r["frozen"]
+
+
+@scenario
+def concession_thief_of_frozen_guardian_still_votes_once():
+    """Judging a confirmation as of its own past means a thief holding a
+    guardian's phrase can confirm on its own branch even after the guardian
+    is frozen. It is one vote, however many keys the thief mints."""
+    b = Builder()
+    guarded(b)
+    race(b, "G1", "rG1", ["G1"])
+    b.write("I", "rec", "N", [("recover", "N", (), "I")])
+    b.write("G1", "m1", "rG1T", [("add", "k1", 2)], ["G1thief"])
+    b.write("G1", "m2", "rG1T", [("add", "k2", 2)], ["G1thief"])
+    confirm(b, "G1", "t1", "rec", signer="k1", parents=["m1"])
+    confirm(b, "G1", "t2", "rec", signer="k2", parents=["m2"])
+    assert not effect(b.ident("I"))                # one guardian, two keys
+    confirm(b, "G2", "c2", "rec")
+    assert effect(b.ident("I")) == {"rec"}         # the stolen vote counted
 
 
 def main():

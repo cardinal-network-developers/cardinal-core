@@ -336,7 +336,16 @@ Guardians decide both. Your court approves changes to your court.
   confirmation's own causal past. It is judged as of when it was made;
   nothing later in the guardian's log changes it. That past is always
   smaller than the set being evaluated, so this never loops, even when two
-  people guard each other.
+  people guard each other, or guard each other while both recover.
+  Each guardian counts once, however many of its keys confirm.
+
+  Judging as of the past has a consequence worth stating. A guardian frozen
+  later keeps the confirmations it made before, which is what makes a
+  recovery final. But a thief holding a guardian's phrase or device can
+  still confirm on a branch of the guardian's log that does not show the
+  freeze. That is one vote, the same as any stolen guardian device
+  ([D31](../decisions.md)). An identity whose guardian is frozen SHOULD
+  replace that guardian, which the remaining guardians approve.
 - **Signer.** A `recover` is signed by the new root key it names, which
   proves possession. A `set_recovery` is signed by a key of the identity.
 - **Approved.** Under a policy that names guardians, a decision is approved

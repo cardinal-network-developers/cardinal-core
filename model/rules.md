@@ -63,7 +63,8 @@ identity log. `confirm_ok(G,D)` holds if some entry `C` of G's log names
 `C`'s causal past. That past is strictly smaller than the set being
 evaluated, so this recursion always ends, even when two people guard each
 other. A confirmation is judged as of when it was made, and nothing later
-in the guardian's log changes it.
+in the guardian's log changes it: not a removal of the confirming key, and
+not the guardian being frozen. Votes are counted per guardian, not per key.
 
 ### Rules
 

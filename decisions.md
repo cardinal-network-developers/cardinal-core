@@ -643,9 +643,14 @@ guardian's own log, the guardian's revocation rules apply, the guardian's
 other devices see every confirmation, and judging each one as of its own
 past makes guardianship between friends who guard each other well-founded.
 
-**Cost.** A thief who steals a guardian's device can still confirm with
-parents from before the guardian removed it. A majority of guardians is
-still needed.
+**Cost.** A thief who steals a guardian's device or phrase can still
+confirm with parents from before the guardian removed the device, or on a
+branch that does not show the guardian frozen. It is one vote per guardian,
+however many keys the thief mints, and a majority of guardians is still
+needed. Reversing a vote when the guardian is later frozen or loses a device
+would let a recovery come undone, which is worse. The fuzzer checks this
+with guardians who guard each other in pairs, cycles, and meshes, while
+they are themselves contested, recovering, or frozen.
 
 ---
 
