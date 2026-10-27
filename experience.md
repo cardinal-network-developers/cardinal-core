@@ -18,8 +18,8 @@ Key, certificate, scope, epoch, entry, blob, chunk, hash, session, host
   guardians from your contacts later. There is no sign-up, email, phone
   number, or password.
 - **Every other device: one code.** "Add this device" shows a short code
-  like `4-amber-harbor-quiet` on the new device; type it on any device you
-  already have. Everything appears.
+  like `4-amber-harbor-quiet` on the new device; type it on your laptop or
+  home computer, the devices that manage the others. Everything appears.
 - **The recovery sheet** is printed or written once. It holds the 24 words
   and the address of one always-on device. Software reminds you, gently and
   rarely, until you have one, and until you have chosen guardians.
@@ -48,9 +48,10 @@ Key, certificate, scope, epoch, entry, blob, chunk, hash, session, host
 - **Two versions.** When two people, or two devices, changed the same thing
   apart, the person sees both, labeled by who and where, and picks or
   merges. Nothing is lost and nothing is chosen silently.
-- **Lost phone.** On any other device: "This phone is lost." The phone is cut
-  off from everything, and contacts' devices learn it the next time they
-  connect.
+- **Lost phone.** On the laptop or home computer: "This phone is lost."
+  Everything it wrote that your other devices had already seen is kept. The
+  phone is cut off from everything, and contacts' devices learn it the next
+  time they connect.
 - **Lost everything.** On a new device: enter the 24 words and the
   always-on device's address. Or ask three of your guardians to approve.
   After the waiting period, everything returns.

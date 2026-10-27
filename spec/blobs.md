@@ -89,10 +89,13 @@ A blob with more than one chunk has an **index**, the record:
 | 1 | level | uint: 0 if entries name chunks, otherwise the level of the indexes they name |
 | 2 | entries | list of `{1: id, 2: key, 3: plaintext length}` |
 
-An index is encrypted and identified the same way as a chunk. An index whose
-encoding would exceed 256 KiB is split into consecutive indexes, which are
-named by an index one level up. One index holds about 3,600 entries, so one
-level covers about 230 MiB and two levels about 800 GiB.
+An index is encrypted and identified the same way as a chunk. An index
+holds at most 3,000 entries. A level with more is split into consecutive
+indexes of exactly 3,000 entries each, except the last, which holds the
+rest, and those are named by an index one level up, split the same way. So
+the same file always produces the same indexes and the same reference. At
+an average chunk of 64 KiB, one level covers about 190 MiB and two levels
+about 550 GiB.
 
 ## References
 

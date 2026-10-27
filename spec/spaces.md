@@ -41,7 +41,7 @@ A **sealed entry** is what is stored and transferred:
 |---|---|---|---|
 | 0 | kind = 3 | uint | |
 | 1 | epoch | bytes(16) | must equal the inner entry's field 7 |
-| 2 | nonce | bytes(24) | random |
+| 2 | nonce | bytes(24) | first 24 bytes of `BLAKE3.keyed_hash(entry key, entry id)` |
 | 3 | ciphertext | bytes | XChaCha20-Poly1305 of the encoded signed object |
 | 4 | wraps | list of sealed records | present only when this entry distributes an epoch key |
 | 5 | open key | bytes(32) | public spaces only: the epoch key in the clear |
@@ -54,12 +54,13 @@ A **sealed entry** is what is stored and transferred:
 - The **epoch id** is the first 16 bytes of `derive("epoch id", epoch key)`.
 - A sealed entry MUST NOT exceed 256 KiB. Bulk content belongs in
   [blobs](blobs.md).
-- Two sealed entries containing the same entry are the same entry. A member
-  MUST reject an entry whose field 7 differs from its sealed field 1, or
-  whose field 8 differs from the hash of its sealed wraps.
+- A member MUST reject a sealed entry whose nonce is not the one derived
+  from its entry id, whose inner field 7 differs from its sealed field 1, or
+  whose inner field 8 differs from the hash of its sealed wraps.
 
-So a member who re-seals someone else's entry produces a duplicate, not a new
-entry, and cannot alter the wraps it carried.
+So each entry has exactly one sealed form. A member who re-seals someone
+else's entry produces the same bytes, not a new object to store and sync,
+and cannot alter the wraps it carried.
 
 A host sees how many sealed entries it holds, their sizes, when epochs
 change, and how many wraps an entry carries. It does not see membership,
@@ -68,21 +69,46 @@ authors, structure, or content.
 ## Authors
 
 An entry is **attributable** if its signing key is a device or admin key of
-the author, added in the author's identity log at or before the cited head.
+the author, effective at the cited head of the author's identity log.
 
 Whether it stays valid depends on what has happened to that key since, as
 the verifier knows from the author's log:
 
-- **still effective, or retired**: valid;
-- **removed as compromised**: valid only if the entry is **witnessed**, that
-  is, an ancestor of an entry by another key of the same author that cites a
-  log head not containing the removal.
+- **still effective**: valid;
+- **removed in any mode**, retired or compromised: valid only if the entry
+  is **witnessed**.
+
+Retired keys are treated like compromised ones here, because a sold laptop
+whose key was never wiped could otherwise write as its old owner forever,
+citing an old log head. An entry by key `K` is witnessed if it is an ancestor
+of, or is listed by, a valid entry of the same author that:
+
+- is signed by another key, and cites a log head that does not contain the
+  removal of `K`; or
+- contains a `keep` op for `K` that lists it or one of its descendants.
 
 A device's entries are thus kept if its own identity built on them while it
-still trusted the device, and discarded otherwise. The owner's other devices
-are the only witnesses whose citations can be trusted: they are not the
-thief. Other members building on an entry does not save it.
+still trusted the device, or if the person chose to keep them afterwards.
+The person's other devices are the only witnesses whose word counts: they are
+not the thief. Other members building on an entry does not save it. A
+witness must itself be valid; since a witness is always a descendant of what
+it witnesses, validity can be computed from the newest entries backward.
 
+**Witnessing is routine.** Every write by one of a person's devices
+witnesses everything of theirs it has seen. Before writing a removal of a
+key, in either mode, software MUST first sync each space it holds with
+whatever holders it can reach, and append an empty entry, with all current
+heads as parents, in each space where the removed key wrote something not
+yet witnessed. A device that retires itself first has another device of the
+identity, usually the one replacing it, do the same.
+
+**Keeping after the fact.** When no device was left to witness, as after a
+recovery from nothing, software offers to keep a removed device's work up to
+a point the person chooses, and writes a `keep` op listing the last entries
+to keep. Entries the thief wrote after that point are not ancestors of them,
+so they stay invalid.
+
+Software MUST show the person when entries are discarded for these reasons.
 Validity converges as identity logs spread. Members MAY hold an entry back
 until they have the author's log.
 
@@ -95,12 +121,14 @@ until they have the author's log.
 | admin | 2 | readers, writers, admins | readers, writers; itself |
 | owner | 3 | anyone | anyone |
 
-Readers receive epoch keys and read. Writers also append application ops and
-rotate epochs. Owners also change policy. The author of the genesis entry is
+Readers receive epoch keys and read; the only entries they write are their
+own reach node, `keep` ops, and their own removal. Writers also append
+application ops and rotate epochs. Owners also change policy. The author of the genesis entry is
 an owner.
 
 As in identity logs, **no member can remove another of equal role, except
 owners removing owners**, so every conflict below owner has an arbiter.
+Conflicts between owners [split the space](#splits).
 
 ## Control operations
 
@@ -110,12 +138,13 @@ ones).
 
 | Op | Name | Fields |
 |---|---|---|
-| 1 | `create` | 1: profile (uint or bytes(32)); 2: policy. Genesis only. |
+| 1 | `create` | 1: profile (uint or bytes(32)); 2: policy; 3: id of the space this one was [split](#splits) from, if any. Genesis only. |
 | 2 | `add_member` | 1: identity id; 2: role |
 | 3 | `set_role` | 1: identity id; 2: role |
 | 4 | `remove_member` | 1: identity id |
-| 5 | `rotate` | 1: new epoch id; 2: list of `{1: epoch id, 2: key}`: the keys of every epoch this one supersedes, only if history is shared |
+| 5 | `rotate` | 1: list of `{1: epoch id, 2: key}`: the keys of every epoch this one supersedes, only if history is shared |
 | 6 | `set_policy` | 1: policy |
+| 7 | `keep` | 1: signing key of a removed device of the author; 2: list of entry ids by that key ([Authors](#authors)) |
 
 **Policy** is a record:
 
@@ -135,15 +164,42 @@ with members in place of keys and roles in place of powers:
   its author by a strictly higher role is a descendant of it.
 - A member leaving (removing itself) is a retirement: its earlier and
   concurrent entries stay.
-- Owners removing owners is judged by authorization alone. Concurrent changes
-  to the set of owners make the space **contested**, shown to every member
-  until an owner settles it.
+- An entry by which an owner removes or downgrades another owner is judged
+  by authorization alone. Any other entry by an owner is invalid if it is
+  concurrent with a valid entry by another owner that removes or downgrades
+  its author. A removed owner therefore cannot keep writing with old parents.
+
+### Splits
+
+A space is **split** when two concurrent valid entries, by different owners,
+each remove or downgrade the other's author. Both entries stay valid, so
+both owners lose their role in the original space. No rule could choose
+between them: two owners who disagree about who belongs are a real
+disagreement, and the protocol does not pretend to settle it.
+
+When a member's device sees a split:
+
+- software shows the original space read-only, with its state computed by
+  the rules above, and writes nothing more to it;
+- software of each owner in the split offers to create a **copy**: a new
+  space whose genesis has `create` field 3 naming the original, holds as
+  `create` ops the state computed as if only that owner's removal were
+  valid, and adds the members that owner chooses;
+- other members are offered each copy as an ordinary membership, and choose
+  which to accept, or both.
+
+A friendship in which one side was compromised should split, not be decided
+by a rule. Each person keeps the history they shared.
 
 ## Epochs
 
 Each epoch is a random 32-byte key.
 
 ### Distribution
+
+Each entry is encrypted under the current epoch in its causal past, except
+that an entry that starts a new epoch (genesis, `rotate`, or an
+`add_member` that rotates) is encrypted under the epoch it starts.
 
 An entry distributes an epoch key by carrying, in sealed-entry field 4, one
 [sealed record](crypto.md#sealing) per recipient, made with that recipient
@@ -156,10 +212,14 @@ each record. The entry's field 8 binds the list.
   policy does not share history, the adding entry MUST instead `rotate` and
   wrap the new key for all members.
 - **`rotate`** starts a new epoch, wrapped for every current member. If
-  history is shared, field 2 carries the key of every epoch it supersedes,
+  history is shared, field 1 carries the key of every epoch it supersedes,
   that is, every epoch current in its causal past. A member holding the
   latest key can therefore walk back to every earlier one, across concurrent
   branches.
+
+A wrap is about 1.2 KB, and an entry is at most 256 KiB, so a space whose
+epochs are wrapped this way holds at most about 200 members. Larger groups
+need the key tree described in [later.md](../later.md#large-groups).
 
 ### When to rotate
 
@@ -208,8 +268,17 @@ A device **holds** a space if it stores its sealed entries. Holders are:
 
 Holders reconcile with [sync.md](sync.md).
 
-**Members are entitled to reach each other.** Sharing a space is consent
-given by whoever added the member, so:
+A member **accepts** a space by writing any valid entry in it, usually its
+reach node. Being added is an offer, not consent: software shows "Ana added
+you to Garden club" and writes nothing until the person accepts. Until an
+identity accepts, it holds the space only for reading the offer, and the
+rules below do not apply to it, in either direction. The adder delivers the
+offer through a relationship it already has with that identity; with no
+relationship, the offer never arrives.
+
+**Members who accepted are entitled to reach each other.** Sharing a space
+is consent given by whoever added the member and by the member who accepted,
+so, among accepted members:
 
 - a device MAY open link sessions with devices of every identity that is a
   member of a space it holds, for that space's sync, blobs, and ephemeral

@@ -47,16 +47,19 @@ signed, durable, mutually held records.
 ## Large groups
 
 Wrapping each epoch key once per member costs about 1.2 KB per member per
-rotation. That is fine to a few thousand members. Beyond that, a tree of
-keys in the style of MLS (RFC 9420) reduces rotation to logarithmic cost.
+rotation, and an entry holds at most 256 KiB, so the current design stops at
+about 200 members ([spaces.md](spec/spaces.md#distribution)). Beyond that, a
+tree of keys in the style of MLS (RFC 9420) reduces rotation to logarithmic
+cost and fits in an entry.
 It would change how epoch keys are distributed inside a space, and nothing
 else.
 
 ## Post-quantum signatures
 
 When forging Ed25519 becomes plausible, a new suite adds ML-DSA or SLH-DSA
-signatures. Each identity moves with `set_suite`, signed by both old and new
-root keys. Larger signatures make entries larger, which matters only for
+signatures. Each identity moves with `set_suite`, in an entry signed by the
+old root key, carrying a signature by the new root key over the entry's
+other contents, as `add_key` carries a proof of possession. Larger signatures make entries larger, which matters only for
 mailbox envelopes. Those may then carry heads messages instead of entries.
 
 ## Software distribution

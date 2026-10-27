@@ -137,7 +137,10 @@ A tool that knows the schema MAY show field names instead of keys
 | 8 | join request | [contact.md](contact.md#when-the-inviter-is-offline) |
 | 9 | host grant | [hosts.md](hosts.md#grants) |
 | 10 | public address | [contact.md](contact.md#following) |
-| 11–63 | reserved for this specification | |
+| 11 | envelope | [hosts.md](hosts.md#envelopes) |
+| 12 | bundle | [sync.md](sync.md#sneakernet-and-delay-tolerant-carriage) |
+| 13 | checkpoint state | [state.md](state.md#pruning) |
+| 14–63 | reserved for this specification | |
 
 Operation records inside entries carry their own small `op` numbers, defined
 in the document that defines the entry.

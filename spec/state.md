@@ -8,7 +8,9 @@ tree. A files space puts folders and files in it, a conversation puts
 messages in it, and an account space puts contacts and settings in it.
 
 Every member computes the same state from the same set of entries, with no
-coordination, and no merge ever discards data silently.
+coordination, and no merge ever discards data silently. Entries are discarded
+only for reasons of authority ([spaces.md](spaces.md#authors)), and software
+shows when that happens.
 
 ## Nodes
 
@@ -45,7 +47,15 @@ Profile op numbers start at 32. These are shared by every profile:
 | 37 | `checkpoint` | see [Checkpoints](#checkpoints) |
 
 A profile may restrict which kinds may be created where, and which fields
-exist. Ops that violate the profile are ignored, but the entry still syncs.
+exist.
+
+An entry is checked as a whole. If any of its ops violates the profile,
+breaks the author-owned rule ([profiles.md](profiles.md#shared-rules-normative)),
+or names a node whose `create` is not in the entry's causal past or in the
+entry itself, the whole entry is ignored for state, though it still syncs.
+These checks depend only on the entry and its causal past, so every device
+makes the same decision. A move skipped to prevent a cycle is not a
+rejection; it is part of the merge, below.
 
 ## Merge rules
 
@@ -57,7 +67,8 @@ membership checks ([spaces.md](spaces.md)). Process their ops in log order.
 For each node and field key, the field's **values** are those written by
 `set` ops (or by `create`) that no other `set` of the same field has
 superseded. A `set` supersedes another if its entry is a descendant of the
-other's entry.
+other's entry, or if both are in the same entry and it comes later in the
+op list.
 
 - One value means the field is settled.
 - Several values mean a **conflict**. Every value is kept. The field stays in
@@ -82,8 +93,11 @@ recomputes. The result is the same on every device.
 
 ### Deletion yields to concurrent work
 
-A `delete` of node `N` takes effect only if every other op that touches `N`
-or any node beneath it is an ancestor of the delete. Otherwise:
+A `delete` of node `N` takes effect unless an op in a concurrent entry
+**touches** `N`. An op touches `N` if any node it names (as target, parent,
+or new parent) is `N`, or is beneath `N` in the state computed from the
+delete's causal past. Ops in entries that descend from the delete do not
+count: they were written knowing about it. If the delete is touched:
 
 - the node stays, and is flagged **delete conflict**;
 - descendants that were not touched concurrently are deleted;
@@ -123,31 +137,53 @@ entry that wrote them, and field 7 is the id of the entry whose `create` or
 encoding. Membership and epochs are not part of it; they are always computed
 from control entries, which are never pruned.
 
-### Pruning never changes the result
+### Barriers
 
-Pruning drops the *content* of old entries, never their place in history.
+A checkpoint that may be pruned changes the rules, for everyone, so that
+pruning cannot change the result.
 
-- A holder that prunes keeps, for every pruned entry, its **skeleton**: its
-  entry id, its parents, and its author. Skeletons cost under 100 bytes per
-  entry, and are enough to compute ancestry and log order exactly.
-- Entries containing control operations ([spaces.md](spaces.md#control-operations))
-  are never pruned.
-- Every merge rule is defined on ancestry and log order, and on the writers
-  recorded in the canonical state. So a pruned holder and a full holder
-  compute the same state from the same entries.
+A **barrier** is a valid prunable checkpoint written by an owner. If two
+prunable checkpoints are concurrent, only the one earlier in log order is a
+barrier. An owner MUST NOT write a prunable checkpoint that does not descend
+from every barrier it knows. Software SHOULD let one always-on device of one
+owner write them, rarely, such as monthly.
 
-Only entries that are ancestors of the frontier of a prunable checkpoint
-written by an owner may be pruned. The space's sync set excludes them for
-every holder, so holders that pruned and holders that did not still agree on
-the set ([sync.md](sync.md#sets)). Full history remains available, from
-holders that keep it, under the history label.
+With a barrier `B` whose frontier is `F`, every holder, pruned or not,
+computes state the same way:
+
+1. The state at `F` is the canonical state in `B`. Decisions about entries
+   in `F`'s causal past are final: an entry the checkpoint included stays,
+   even if a removal that would invalidate it arrives later.
+2. Every other valid entry is applied on top of that state, in log order
+   among themselves.
+3. For every merge rule, each entry in `F`'s causal past counts as an
+   ancestor of each entry that is not. A late entry concurrent with `F`
+   therefore never reorders, outvotes, or blocks anything before the
+   barrier.
+
+A member whose own computation of the state at `F` differs from `B`'s state
+root SHOULD tell its person; the barrier still holds. A checkpoint by a key
+later found to be compromised is invalid unless witnessed, like any entry
+([spaces.md](spaces.md#authors)), and then it was never a barrier.
+
+### Pruning
+
+Pruning drops the content of entries in the latest barrier's frontier's
+causal past. Entries containing control operations
+([spaces.md](spaces.md#control-operations)) are never pruned. A holder that
+prunes keeps the ids of the pruned entries, so that it can tell whether an
+arriving entry's parents exist and whether an entry is before the barrier.
+
+The space's sync set excludes pruned entries for every holder, so holders
+that pruned and holders that did not still agree on the set
+([sync.md](sync.md#sets)). Full history remains available, from holders that
+keep it, under the history label.
 
 A device MAY start from a checkpoint written by its own identity or by a
 space owner, and MUST NOT start from anyone else's. The checkpoint's state
-blob is the record `{1: canonical state, 2: skeletons of every entry before
-the frontier, as {1: entry id, 2: parents, 3: author}}`. The device verifies
-the state root against field 1, verifies that the skeletons link up to the
-frontier, and continues from there.
+blob is the record `{0: 13, 1: canonical state, 2: ids of every entry in the
+frontier's causal past}`. The device verifies the state root against field
+1, checks that the frontier's ids are in field 2, and continues from there.
 
 ## Cost
 

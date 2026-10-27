@@ -71,7 +71,19 @@ tokens with their classes, and a set of revoked tokens. A revoked token can
 never become active again.
 
 Tokens rotate whenever the space's epoch rotates: the old token was known to
-members who may have been removed.
+members who may have been removed. Each member rotates its own:
+
+1. On seeing a new epoch, the member's device registers a fresh token and
+   writes its reach node with it, in the new epoch.
+2. It deposits that reach node, through each other member's current token,
+   in their mailboxes, so members who were offline learn it.
+3. It keeps the old token active until every remaining member has written
+   an entry that descends from the new reach node, or until the grant's
+   retention period has passed, and then revokes it. A token is revoked at
+   once only if it is being abused.
+
+A member who missed every notice can still reach the others through any
+older token that has not yet been revoked.
 
 ## Service messages
 
@@ -89,8 +101,8 @@ data never enters a mailbox.
 
 ### Envelopes
 
-An envelope is `{1: epoch id (16), 2: nonce (24), 3: ciphertext}`, at most
-1024 bytes encoded. The ciphertext is XChaCha20-Poly1305 under
+An envelope is `{0: 11, 1: epoch id (16), 2: nonce (24), 3: ciphertext}`,
+at most 1024 bytes encoded. The ciphertext is XChaCha20-Poly1305 under
 `derive("mailbox", epoch key)`, where the epoch is the one named in field 1,
 of the space the token belongs to. The owner knows the space from the token,
 and the epoch from field 1. Join requests omit field 1
@@ -101,8 +113,7 @@ The plaintext is an **envelope payload**:
 | Key | Field |
 |---|---|
 | 0 | kind = 7 |
-| 1 | space id |
-| 2 | a sealed entry, or a heads message ([sync.md](sync.md#when-to-sync)) |
+| 1 | a sealed entry, or a heads message ([sync.md](sync.md#when-to-sync)) |
 
 ### Operations
 
@@ -152,7 +163,9 @@ other's address at the same moment. A host does that.
   is the owner's own device. They may also apply their own rate limits.
 - The host replies with the static key and observed address of each owner
   device that is present. Local addresses reported in `present` are passed
-  only between devices of the same identity.
+  between devices of the same identity, and to a requester whose observed
+  address equals that owner device's, since they are then behind the same
+  router and already share a network.
 - Both sides then send initiations to the addresses they were given. The
   first session to complete wins. If none completes within three seconds,
   the requester relays.
@@ -179,20 +192,24 @@ validates. Relay bytes count against the token's class.
 ## Storage
 
 A host granted storage keeps sets of objects for the owner: sealed entries of
-the owner's spaces, chunks, and identity logs, each set under a random label
-the owner chose. The host verifies each object against its id and nothing
-else, because it can read nothing else.
+the owner's spaces, chunks, and identity logs. Identity logs are kept under
+their identity log label ([sync.md](sync.md#sets)); every other set is kept
+under a random label the owner chose. The host verifies each object against
+its id and nothing else, because it can read nothing else, except identity
+logs, which are not secret and which it evaluates.
+
+Sets are reconciled, fetched, and filled with the ordinary
+[sync service](sync.md): owner devices for any label, token holders for
+labels allowed to their token, and anyone for public labels. Only owner
+devices may send `objects`. The storage service manages the sets:
 
 | Op | Request | Reply | Who |
 |---|---|---|---|
-| 1 | reconcile: a [sync](sync.md) message | a sync message | owner device; token holder for allowed labels; anyone for public labels |
-| 2 | fetch: as in [sync.md](sync.md#fetching-objects) | objects | same |
-| 3 | put: `{0: 3, 1: label, 2: list of objects}` | `{0: 3}` | owner device |
-| 4 | drop: `{0: 4, 1: label, 2: list of ids}` | `{0: 4}` | owner device |
-| 5 | list: `{0: 5}` | `{0: 5, 1: list of {1: label, 2: count, 3: bytes}}` | owner device |
-| 6 | allow: `{0: 6, 1: token, 2: label}` | `{0: 6}` | owner device |
-| 7 | public: `{0: 7, 1: label, 2: bool}` | `{0: 7}` | owner device |
-| 8 | prove: `{0: 8, 1: list of identity log entries}` | `{0: 8}` | restore (below) |
+| 1 | drop: `{0: 1, 1: label, 2: list of ids}` | `{0: 1}` | owner device |
+| 2 | list: `{0: 2}` | `{0: 2, 1: list of {1: label, 2: count, 3: bytes}}` | owner device |
+| 3 | allow: `{0: 3, 1: token, 2: label}` | `{0: 3}` | owner device |
+| 4 | public: `{0: 4, 1: label, 2: bool}` | `{0: 4}` | owner device |
+| 5 | prove: `{0: 5, 1: root signing key, 2: signature}` | `{0: 5, 1: identity id}` | restore (below) |
 
 `allow` lets members of the token's space fetch from the host while the
 owner's devices are asleep. This is how a photo shared with a friend can be
@@ -202,7 +219,9 @@ fetched when the sharer's laptop is closed.
 
 A label marked public may be reconciled and fetched by anyone who can reach
 the host. A host with any public label accepts handshakes from unknown static
-keys, without a secret, but only for storage ops 1 and 2 on public labels.
+keys, without a secret and without an ML-KEM ciphertext, but only for the
+sync and blob services on public labels. A public address carries only the
+host's X25519 key, so these sessions rely on the post-quantum rekey.
 Such a host still requires mac1, so only those given its static key (for
 example in a [public address](contact.md#following)) can reach it.
 
@@ -212,20 +231,28 @@ A person who lost every device enters the recovery phrase on a new device,
 and the address and static key of one host, both printed on their recovery
 sheet. Software updates the sheet's host whenever hosts change.
 
-1. The new device recreates the root key, and creates a root-signed identity
-   entry that adds itself as an admin.
+1. The new device recreates the root key and the recovery key pair from the
+   phrase, and generates its own device key and link key.
 2. It connects to the host without a secret and without an ML-KEM
-   ciphertext, since it does not yet know the host's ML-KEM key. A host
-   accepts this handshake only for op 8. The first request MUST be `prove`,
-   carrying identity log entries that make the initiator an effective device
-   of an identity the host serves. Otherwise the host closes the session.
-3. After `prove`, the session is an owner session, and the device runs the
-   mandatory post-quantum rekey before anything else.
-4. The device fetches its identity log (by the identity log label), recovers
-   the encryption key from the latest recovery wrap
+   ciphertext, since it does not yet know the host's ML-KEM key. The host
+   accepts this handshake only for the post-quantum rekey and `prove`, and
+   closes the session if the first request is anything else.
+3. `prove` carries the root signing key and its signature over
+   `"cardinal restore" || h`, where `h` is the session's handshake hash. The
+   host finds a served identity in whose log that root key is effective, and
+   replies with its id. From then on the session is an owner session.
+4. The device fetches the identity log by its label, appends an entry signed
+   by the root that adds itself as an admin, with its proof of possession,
+   and sends it with `objects`.
+5. It opens the latest recovery wrap with the recovery private key
    ([identity.md](identity.md#data-recovery)), lists the labels, and opens
    each set until it finds the account space. The account space records
    everything else: other hosts, labels, spaces, and contacts.
+
+A device restored through guardians instead holds the new root key named in
+the `recover` entry. Guardians' devices deliver their entries to the
+recovering identity's hosts, so once the recovery takes effect there, the
+same steps work with that root.
 
 ## Staying reachable
 
@@ -251,6 +278,7 @@ A device of the same identity recognizes the tag and connects. Anyone else
 learns only that some device of this kind is present. The advertisement
 names no identity, and successive advertisements cannot be linked.
 
-Contacts on the same network do not need discovery: rendezvous passes local
-addresses between a person's own devices, and contacts connect through their
-observed addresses, which on a shared network are local.
+Contacts on the same network do not need discovery. Rendezvous passes local
+addresses between a person's own devices, and to a contact whose observed
+address shows it is behind the same router
+([Rendezvous](#rendezvous)).

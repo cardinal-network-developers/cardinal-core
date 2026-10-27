@@ -289,8 +289,9 @@ each other and resolved conflicts by removing both sides.
 revoked admin writes a removal with old parents, and it is structurally
 identical to a genuine concurrent removal. No rule without trusted time can
 tell them apart, so any rule either lets the attacker win races or lets them
-grief forever. A strict order gives every conflict a higher arbiter, and
-backdating then gains nothing.
+grief forever. A strict order gives every conflict below the top a higher
+arbiter, and there backdating gains nothing. At the top, roots and owners,
+backdating is still possible; D21 says what happens then.
 
 **Cost.** Losing an admin device requires the recovery phrase or guardians.
 Losing a phone, the common case, does not.
@@ -310,3 +311,131 @@ always use, and which made the outcome depend on arrival time.
 hold the same secret. A veto handed that decision back to whoever holds the
 secret. Separate endorsement entries also sync like any other entry, which
 multi-signature objects did not.
+
+---
+
+### D17. The phrase is a key pair, not a symmetric key
+
+**Choice.** The recovery phrase yields a hybrid key pair. Its public half is
+in the identity log; recovery wraps are sealed to it.
+
+**Replaces.** A symmetric recovery data key, under which every new
+encryption key was wrapped.
+
+**Why.** A reviewer showed that an admin device writing a new encryption key
+had to hold the symmetric key, so a thief who stole an admin could read
+every future key from the public log. With a key pair, any admin can seal
+to the phrase, and only the phrase can open.
+
+**Cost.** One ML-KEM key in the log, and one more seeded key derivation.
+
+---
+
+### D18. Changing guardians waits as long as a recovery
+
+**Choice.** A new guardian set takes effect at each verifier only after the
+old delay has passed there, and the old guardians are alerted.
+
+**Replaces.** Guardian changes that took effect at once, judged by each
+recovery's causal past.
+
+**Why.** Judging by causal past let replaced guardians recover forever with
+old parents. Judging by the latest policy alone would let a phrase thief
+install friendly guardians and recover at once. A waiting period gives the
+old guardians the same chance to act that recovery gives the owner.
+
+**Cost.** Changing guardians takes a week by default.
+
+---
+
+### D19. Recoveries become final
+
+**Choice.** A recovery is final once its new root writes a valid entry.
+Later withdrawals and removals of endorsing devices are ignored. Objections
+double the delay only once.
+
+**Replaces.** Recoveries that could be undone at any time by a withdrawal,
+and delays that could be doubled without limit.
+
+**Why.** Without finality, a guardian device stolen years later could undo
+a recovery and revive the thief's keys. Without a limit, repeated objections
+were a veto by another name, which D16 removed.
+
+**Cost.** A guardian who changes their mind after the delay is too late.
+The delay is the time to change one's mind.
+
+---
+
+### D20. Removed devices' work is kept only if the owner witnessed it
+
+**Choice.** In spaces, an entry by a removed key, retired or compromised, is
+valid only if another of the author's devices built on it while still
+trusting the key, or the author later listed it in a `keep` op. Software
+witnesses every space before writing a removal.
+
+**Replaces.** A rule that kept retired keys' entries unconditionally, and
+kept compromised keys' entries only if witnessed, with no routine witnessing.
+
+**Why.** Unconditional trust in retired keys let a sold laptop write as its
+old owner forever. Witnessing without routine meant that marking a phone
+lost could discard months of its honest messages. Routine witnesses make the
+common case lose nothing, and `keep` covers recovery from nothing.
+
+**Cost.** One small entry per space on each removal. Work a device did that
+no other device saw, and that the person does not choose to keep, is lost.
+
+---
+
+### D21. At the top, conflicts go to people
+
+**Choice.** A contest between roots of an identity ends only by recovery,
+decided by guardians. A conflict between owners of a space splits it: the
+original becomes read-only, and each owner may make a copy.
+
+**Replaces.** The claim that a root could end a contest by removing the
+others, and that an owner could settle an owner conflict.
+
+**Why.** D15 gives every conflict below the top an arbiter. At the top there
+is none, and any rule would let one side win by writing entries with old
+parents. Guardians exist for exactly this in identities. In a space, two
+owners who each removed the other genuinely disagree, and the honest outcome
+is that each keeps what they shared.
+
+**Cost.** A space can split, which software must present clearly. A thief
+with the phrase can force the owner to involve guardians.
+
+---
+
+### D22. Prunable checkpoints are barriers
+
+**Choice.** An owner's prunable checkpoint fixes the state at its frontier
+for every holder. Later entries apply on top of it, and everything before it
+counts as their ancestor.
+
+**Replaces.** Pruning with skeletons, which claimed that pruned and full
+holders computed the same state.
+
+**Why.** A reviewer showed that late entries concurrent with the frontier
+could reorder moves, block deletes, or change validity in ways only a full
+holder could compute. Changing the rule for everyone, not just for pruned
+holders, makes agreement exact.
+
+**Cost.** A device that was offline across a barrier has its concurrent
+changes applied after the checkpoint's state, rather than interleaved. A late
+removal cannot invalidate entries the checkpoint already included.
+
+---
+
+### D23. Encryption keys form a chain
+
+**Choice.** Each new identity encryption key carries every key it replaces,
+sealed to itself.
+
+**Replaces.** Wrapping only the current key for new devices and recovery.
+
+**Why.** Spaces rotate only at their next write, so an idle space can stay
+under an old key for years. Without a chain, a new or restored device could
+not read it, and a guardian whose own key had changed could not open their
+share.
+
+**Cost.** About 1.2 KB per replaced key, per key change, in the identity log.

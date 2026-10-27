@@ -52,7 +52,7 @@ the specification is listed here:
 |---|---|---|
 | `seal` | hybrid sealing key | this document |
 | `root key` | identity root key seed from the recovery phrase | [identity.md](identity.md) |
-| `recovery data` | recovery data key from the recovery phrase | [identity.md](identity.md#data-recovery) |
+| `recovery key` | recovery seed from the recovery phrase | [identity.md](identity.md#recovery-phrase) |
 | `entry key` | space entry encryption key, from an epoch key | [spaces.md](spaces.md) |
 | `epoch id` | epoch identifier, from an epoch key | [spaces.md](spaces.md) |
 | `convergence` | per-epoch convergence secret for chunks | [blobs.md](blobs.md) |
@@ -60,9 +60,10 @@ the specification is listed here:
 | `discovery` | LAN discovery MAC key | [hosts.md](hosts.md) |
 | `invite` | invitation keys | [contact.md](contact.md) |
 | `token` | link secret from a delivery token | [link.md](link.md#handshake) |
-| `pair`, `pair words` | pairing channel key and confirmation words | [contact.md](contact.md#pairing) |
+| `pair` | pairing channel key | [contact.md](contact.md#pairing) |
 | `handshake` | link handshake key schedule | [link.md](link.md) |
 | `rekey` | link post-quantum rekey | [link.md](link.md) |
+| `hybrid key` | hybrid key pair from a seed | this document |
 
 A keyed hash is `BLAKE3.keyed_hash(key, input)`.
 
@@ -70,6 +71,11 @@ A keyed hash is `BLAKE3.keyed_hash(key, input)`.
 
 A **hybrid public key** is a record `{1: x25519 public (32), 2: ML-KEM-768
 encapsulation key (1184)}`. Its **fingerprint** is `BLAKE3` of its encoding.
+
+Most hybrid key pairs are generated from fresh randomness. One generated
+**from a seed** `s` takes 96 bytes of `derive("hybrid key", s)`: the first 32
+are the X25519 private key, and the next 64 are the ML-KEM-768 key
+generation seed `d || z` (FIPS 203, `ML-KEM.KeyGen_internal`).
 
 ## Sealing
 
@@ -89,6 +95,18 @@ safe. Overhead is 32 + 1088 + 16 bytes, plus encoding headers.
 `open` reverses these steps. A recipient that does not know which of several
 sealed records is for it tries each one; the AEAD tag tells it which.
 
+## Signature verification
+
+Ed25519 signatures MUST be verified by the rules of ZIP-215: `S` must be less
+than the group order, encodings of `A` and `R` need not be canonical, and the
+cofactored equation `[8][S]B = [8]R + [8][k]A` decides. Libraries disagree on
+these edge cases, and a signature that one implementation accepts and another
+rejects would split every log it appears in. The test vectors MUST include
+ZIP-215's edge cases.
+
+Signers always produce canonical signatures, so this choice affects only what
+is accepted.
+
 ## Random numbers
 
 All secrets come from the operating system's cryptographic random source.
@@ -102,4 +120,6 @@ Devices without one cannot participate.
   handshake; protection of stored data comes from epoch rotation. See
   [decisions.md](../decisions.md) for the reasoning.
 - **No custom variants of primitives.** Ed25519 is pure Ed25519 over the
-  message bytes, so any standard library works.
+  message bytes, so any standard library can sign. Verification follows
+  ZIP-215, which some libraries offer as an option and others need a small
+  wrapper for.

@@ -147,16 +147,19 @@ everyone's devices keep syncing with each other through the station's own
 hosts. People still message, share, add devices, and even remove compromised
 devices. When the link returns, every space and identity log reconciles
 deterministically. Revocations made inside the station take effect outside
-as soon as the logs propagate, and changes made by a revoked device
-concurrently with its revocation are discarded on both sides. Nobody had to
-ask permission from anyone outside the station.
+as soon as the logs propagate, and changes a revoked device made that none
+of its owner's other devices had seen are discarded on both sides. Nobody
+had to ask permission from anyone outside the station.
 
 ## Walkthrough: identity theft
 
-A thief steals Ana's recovery phrase and appends a new root key to her log.
-Ana, who still has the phrase, appends her own. Her log now has two
-conflicting roots, and every contact who syncs it sees the fork: the identity
-is **contested**. Ana calls her guardians. Three of the five friends she
+A thief steals Ana's recovery phrase, adds a new root key to her log, and
+removes her old one. Ana's software notices, and with her phrase writes a
+removal of the thief's root, from before the theft. Her log now has two
+conflicting changes to its roots, and every contact who syncs it sees the
+fork: the identity is **contested**. The thief tries to replace her
+guardians, but a change of guardians waits as long as a recovery does. Ana
+calls her guardians. Three of the five friends she
 named endorse a recovery that removes every key but a new root on Ana's new
 phone. The thief objects, which doubles the waiting period and alerts every
 guardian, but cannot stop it; only guardians can withdraw their endorsement.

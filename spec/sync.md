@@ -17,9 +17,9 @@ A set is named by a **label**, 32 bytes, agreed by both sides:
 
 | Set | Label | Who may name it |
 |---|---|---|
-| a space's sealed entries, excluding those pruned by its latest prunable checkpoint ([state.md](state.md#checkpoints)) | the space id | member devices to member devices |
+| a space's sealed entries, excluding those pruned behind its latest barrier ([state.md](state.md#barriers)) | the space id | member devices to member devices |
 | a space's full history | `BLAKE3("history" \|\| space id)` | member devices to member devices, on request |
-| an identity log | `BLAKE3("identity log" \|\| identity id)` | everyone listed in [identity.md](identity.md#distribution) |
+| an identity log | `BLAKE3("identity log" \|\| identity id)` | everyone listed in [identity.md](identity.md#distribution), and the identity's storage hosts |
 | a stored set at a host | a random label the owner chose when granting storage ([hosts.md](hosts.md#storage)) | the owner's devices and that host |
 | chunks of a space held by a host | likewise | likewise |
 
@@ -56,7 +56,7 @@ Messages on the `sync` service are records whose key 0 is an op:
 | 1 | reconcile: `{0: 1, 1: label, 2: ranges}` |
 | 2 | want: `{0: 2, 1: label, 2: ids}` |
 | 3 | objects: `{0: 3, 1: label, 2: list of object bytes}` |
-| 4 | heads: `{0: 4, 1: space id, 2: entry ids}` |
+| 4 | heads: `{0: 4, 1: space id, 2: sealed ids}` |
 
 In a reconcile message, `ranges` is a
 list of records, ascending, together covering all possible ids:
@@ -97,7 +97,13 @@ and against the rules of the layer that owns the set, before storing it.
 
 An object whose prerequisites are missing (a space entry whose parents have
 not arrived, an identity entry whose parents have not arrived) is held, and
-its prerequisites are requested.
+the receiver reconciles that set with the sender. Parents are named by entry
+id, which a host cannot see, so missing parents are found by reconciling,
+not by `want`.
+
+A storage host accepts `objects` for a label only from the owner's devices.
+That is how an owner puts objects into storage
+([hosts.md](hosts.md#storage)).
 
 ## Blob transfer
 
@@ -145,9 +151,11 @@ session. A device can write a **bundle**: a file containing a label and
 objects, optionally sealed to a recipient identity's encryption key. Carry it
 on a USB stick, send it over a satellite store-and-forward link, or hand it
 to a courier. The receiver imports it exactly as if the objects had arrived
-by fetch. A bundle is a file containing one or more `objects` messages, or
-that content [sealed](crypto.md#sealing) to a recipient identity's encryption
-key, as `{1: recipient identity id, 2: sealed record}`.
+by fetch. A bundle is a file holding one record: either
+`{0: 12, 1: list of objects messages}`, or
+`{0: 12, 2: recipient identity id, 3: sealed record}`, where the sealed
+record is that list [sealed](crypto.md#sealing) to the recipient identity's
+encryption key, with context `"bundle"`.
 
 This is not a special mode. It is the same objects and the same checks,
 carried by different means.

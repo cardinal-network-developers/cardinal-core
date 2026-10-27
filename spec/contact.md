@@ -7,7 +7,8 @@ document defines the only ways a connection starts:
 
 1. **Invitation**: a code or link sent by any channel.
 2. **Pairing**: a short code exchanged in person on the same local network.
-   The same mechanism adds a new device to your own identity.
+   The same mechanism adds a new device to your own identity; the code is
+   typed on an admin device.
 3. **Introduction**: a mutual contact vouches, and both sides accept.
 
 Each ends the same way: a session between two devices, an exchange of
@@ -55,8 +56,12 @@ mixes in the invitation secret instead ([link.md](link.md#handshake), step
 invitation sent over a channel the attacker records is therefore exactly as
 secure as that channel. Send invitations the way you would send a house key.
 
-The inviter's software keeps each invitation until its uses run out, or until
-the inviter cancels it. Expiry is local policy: no clock is trusted but the
+The inviter's software keeps each invitation in the account space
+([profiles.md](profiles.md#account)) until its uses run out, or until the
+inviter cancels it, so every device of the inviter can accept it. Each use
+is recorded as its own node, so uses on two devices both count; under
+partition an invitation can be used a few more times than intended, which
+is the physics limit. Expiry is local policy: no clock is trusted but the
 inviter's own.
 
 ### Accepting
@@ -77,7 +82,10 @@ inviter's own.
    each other's identity logs.
 4. The inviter's device creates the relationship space, with a genesis entry
    adding both identities as owners, wrapped for both encryption keys, and
-   sends it as `genesis`.
+   sends it as `genesis`. If the invitation is a [front door](#front-door),
+   the inviter's software instead holds the request until its person
+   accepts it, and creates the space only then. Until then, nothing the
+   requester sends reaches the person except the request itself.
 5. Each device asks its person for a petname, offering the other's suggested
    name, and records the contact in the account space. Then `done`.
 
@@ -109,26 +117,31 @@ person adding a device.
 2. That device advertises `_cardinal-pair._udp` by multicast DNS, with TXT
    `c=<channel>`, and listens on the advertised UDP port. The device where the
    code is typed finds it.
-3. The two devices run CPace (Ristretto255, SHA-512), with password = the
-   three words joined by single spaces, and session identifier =
-   `BLAKE3("cardinal 1 pair" || channel as varint || the shower's address ||
-   the typer's address)`. Each CPace message is one UDP datagram:
-   `{0: 1, 1: CPace share}`. The result is a shared key `K`.
+3. The two devices run CPace (Ristretto255, SHA-512) in initiator-responder
+   mode, the typer as initiator, with password = the three words joined by
+   single spaces, empty associated data, and session identifier =
+   `BLAKE3("cardinal 1 pair" || channel as varint || the shower's endpoint ||
+   the typer's endpoint)`, each endpoint as the encoding of an
+   [endpoint](hosts.md#grants) record. Each CPace message is one UDP
+   datagram: `{0: 1, 1: CPace share}`. The result is a shared key `K`.
 4. Key confirmation: each side sends `{0: 2, 1: tag}`, with
    `tag = BLAKE3.keyed_hash(K, "cardinal 1 pair confirm" || own share)`.
    A wrong tag ends the attempt. After three failed attempts on a code, the
    showing device invents a new code. An attacker therefore gets three
    guesses against 33 bits.
-5. Each side sends `{0: 3, 1: nonce (24), 2: ciphertext}`, encrypted with
-   XChaCha20-Poly1305 under `derive("pair", K)`. The plaintext is
-   `{1: identity id (if any), 2: device signing key, 3: full link key,
-   4: endpoint, 5: suggested name, 6: proof}`. The proof is the
+5. The typer, then the shower, sends `{0: 3, 1: nonce (24), 2: ciphertext}`,
+   encrypted with XChaCha20-Poly1305 under `derive("pair", K)`. The
+   plaintext is `{1: identity id (if any), 2: device signing key, 3: full
+   link key, 4: endpoint, 5: suggested name, 6: proof}`. The proof is the
    [proof of possession](identity.md#operations) for adding this device to
-   the other side's identity, made only by a device that has no identity yet.
-6. The devices open a link session, using `derive("invite", K)` as the secret.
-7. Both screens show the other side's suggested name, and four words from the
-   BIP-39 list, chosen by the first 44 bits of `derive("pair words", K)`. The
-   people confirm that the words match.
+   the other side's identity. Only a device that has no identity yet makes
+   one, and it is always the shower, so it has already received the typer's
+   identity id.
+6. The devices open a link session, using `derive("invite", K)` as the
+   secret. Both screens show the other side's suggested name.
+
+CPace's key confirmation already proves that both sides typed the same code,
+so no further comparison is needed.
 
 Then:
 
@@ -136,8 +149,10 @@ Then:
   device of the person appends to the identity log an `add_key` for the new
   device, with the proof it received, at **device** power unless the person
   says this device will stay at home and manage others, and a `wrap` of the
-  identity encryption key. It sends the log. The new device can now open the
-  account space and every other space, and begins to sync. No space needs to
+  current identity encryption key. It sends the log. Through the key chain
+  ([identity.md](identity.md#the-identity-encryption-key)), the new device
+  can open every earlier encryption key, and so the account space and every
+  other space, and begins to sync. No space needs to
   change, because spaces belong to identities.
 - **Meeting a person.** Steps 3 to 5 of [Accepting](#accepting).
 

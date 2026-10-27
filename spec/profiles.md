@@ -37,11 +37,20 @@ with anyone else.
 | Kind | Name | Fields |
 |---|---|---|
 | 1 | contact | 1: identity id; 2: petname; 3: relationship space id; 4: notes; 5: is a guardian; 6: accept introductions from (bool) |
-| 2 | space | 1: space id; 2: local name; 3: retention per device: list of `{1: device key, 2: policy}`; 4: where each device shows it, such as a folder path: list of `{1: device key, 2: text}` |
-| 3 | host | 1: grant (signed object bytes); 2: storage labels: list of `{1: label, 2: space id, 3: 0 entries / 1 chunks}`; 3: tokens issued: list of `{1: token, 2: space id}` |
+| 2 | space | 1: space id; 2: local name |
+| 3 | host | 1: grant (signed object bytes) |
 | 4 | device | 1: device key; 2: name; 3: is always on; 4: is a host for this identity |
 | 5 | secret | 1: purpose (text); 2: value (bytes). Holds the discovery secret and similar. |
 | 6 | setting | 1: name (text); 2: value |
+| 7 | placement | under a space node: 1: device key; 2: retention policy; 3: where the device shows the space, such as a folder path |
+| 8 | storage label | under a host node: 1: label; 2: space id; 3: 0 entries, 1 chunks |
+| 9 | token | under a host node: 1: token; 2: space id; 3: revoked (bool) |
+| 10 | invitation | 1: invitation record; 2: cancelled (bool) |
+| 11 | invitation use | under an invitation node: 1: identity id that used it |
+
+Anything a person's devices may add to concurrently is a node of its own,
+never an item in a list field, so concurrent additions merge instead of
+conflicting.
 
 Retention policies are 0 full, 1 on demand, 2 full with history
 ([blobs.md](blobs.md#retention)).

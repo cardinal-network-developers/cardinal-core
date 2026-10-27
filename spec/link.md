@@ -34,8 +34,8 @@ A device accepts sessions only from:
 
 - devices of its own identity;
 - devices of identities it has a relationship with;
-- devices of identities it shares a space with, for that space only
-  ([spaces.md](spaces.md#holding-a-space));
+- devices of identities it shares a space with, once both have accepted
+  it, for that space only ([spaces.md](spaces.md#holding-a-space));
 - its hosts;
 - initiators holding an invitation it issued ([contact.md](contact.md)).
 
@@ -61,7 +61,7 @@ Integers are little-endian.
 
 | Field | Bytes |
 |---|---|
-| type = 1, then 3 zero bytes | 4 |
+| type = 1, then a 3-byte secret hint | 4 |
 | sender index | 4 |
 | counter (u64), authenticated, not encrypted | 8 |
 | ephemeral X25519 public key | 32 |
@@ -90,7 +90,7 @@ Integers are little-endian.
 | type = 4, key phase (0 or 1), then 2 zero bytes | 4 |
 | receiver index | 4 |
 | counter (u64) | 8 |
-| ChaCha20-Poly1305 ciphertext of frames, nonce = 4 zero bytes ∥ counter | rest |
+| ChaCha20-Poly1305 ciphertext of frames, nonce = 4 zero bytes ∥ counter, associated data = the 16 header bytes before it | rest |
 
 **Indexes** are random 32-bit values chosen by each side for each session.
 They are the session's only identifier on the wire, so a passive observer
@@ -119,9 +119,15 @@ Let `R` be the responder's link key and `I` the initiator's.
    `MixHash(ct)`, `MixKey(ss)`. It is unknown only when connecting with an
    invitation, which carries just an X25519 key; then the ciphertext field
    is 1088 zero bytes and nothing is mixed. A responder that receives a
-   zero ciphertext MUST require a secret at step 5, except in the restore
-   case ([hosts.md](hosts.md#restore)).
-4. `MixKey(X25519(e, R.x25519))`.
+   zero ciphertext MUST require a secret at step 5, except in the public and
+   restore cases ([hosts.md](hosts.md#public-service)), which carry no
+   secret and rely on the rekey that follows.
+4. `MixKey(X25519(e, R.x25519))`. The **secret hint** in the header is then
+   `first3(H(p)) XOR first3(BLAKE3.keyed_hash(ck, "hint"))` if a secret `p`
+   is used at step 5, and 3 random bytes otherwise. The mask is fresh for
+   every initiation, so the hint links nothing; a responder that has
+   computed `ck` this far unmasks it and finds the matching secret by
+   lookup.
 5. If this handshake uses a secret `p`, `MixKey(p)`. The secret is an
    invitation secret ([contact.md](contact.md)), or, toward a host,
    `derive("token", delivery token)`.
@@ -131,11 +137,9 @@ Let `R` be the responder's link key and `I` the initiator's.
 
 **Responder** repeats these steps to decrypt. It first tries without a
 secret; if the static decrypts to a key it accepts, it continues. Otherwise it
-tries each outstanding invitation secret, and each token it serves if it is a
-host, and drops the packet silently if none works. It then rejects the
-initiation unless the counter is greater than the last counter accepted from
-that static key. Initiators use `max(last counter + 1, milliseconds since
-1970)` and SHOULD persist it. Then it replies:
+tries the invitation secrets and tokens whose hint matches, and drops the
+packet silently if none works. It drops the initiation unless the counter is
+greater than the **confirmed counter** for that static key, then replies:
 
 1. Generate ephemeral `(f, F)`. `MixHash(F)`.
 2. `MixKey(X25519(f, E))`.
@@ -144,6 +148,16 @@ that static key. Initiators use `max(last counter + 1, milliseconds since
    invitation): `(ct2, ss2) = Encaps(I.kem)`; `MixHash(ct2)`; `MixKey(ss2)`.
    Otherwise the ciphertext field is 1088 zero bytes and is not mixed.
 5. `Encrypt(empty)`.
+
+The counter is authenticated only by keys an attacker who knows both
+public keys could also compute, since the static-static step comes after the
+last encryption in the initiation. So a responder does not trust it yet. It
+keeps any existing session with that static key, and records the
+initiation's counter as confirmed only when the first data packet of the new
+session authenticates, which proves the initiator holds its private key. A
+forged initiation with a huge counter therefore costs the responder one
+reply and changes nothing. Initiators use `max(last counter + 1,
+milliseconds since 1970)` and SHOULD persist it.
 
 **Transport keys.** Both sides take 64 bytes of
 `BLAKE3.derive_key("cardinal 1 handshake", ck || "split")`. The first 32
@@ -155,18 +169,22 @@ reverse.
 The handshake's ML-KEM steps protect against a future quantum computer
 unless a device's link private key is later stolen. To close that gap, the
 initiator MUST send a `rekey` frame carrying a fresh ephemeral ML-KEM public
-key as its first data, and the responder answers with `rekey reply`. Both
-then derive new transport keys from
+key immediately after its `device proof`, and the responder answers with
+`rekey reply`. Both then derive new transport keys from
 `BLAKE3.derive_key("cardinal 1 rekey", ck || ss)` (64 bytes, split as above),
 switch the key phase bit, and set `ck` to the first 32 bytes of
 `BLAKE3.derive_key("cardinal 1 rekey", ck || ss || "ck")`.
 
 The session's initiator starts the same exchange every two minutes of
-activity, or every 2^40 packets, whichever comes first. If both sides send
-`rekey` at once, the one from the session's initiator is answered and the
-other is ignored. Packet counters continue across key phases; they never
+activity, or every 2^40 packets, whichever comes first. Only the initiator
+sends `rekey`, so the two sides never start one at once. Packet counters
+continue across key phases; they never
 reset within a session. Receivers accept the previous key phase for five
 seconds after a switch.
+
+Receivers MUST reject replayed data packets, with a sliding window of at
+least 2048 counters, as in WireGuard. The window is updated only after a
+packet authenticates.
 
 ### Silence and cookies
 
@@ -199,8 +217,8 @@ Before anything else, each side sends a `device proof` frame:
 "cardinal device proof" || h}`, where `h` is the handshake hash after the
 response. The receiver MUST check the signature, that the key is effective in
 that identity's log, and that the log lists this session's static key as its
-link key. Until both proofs are verified, only `device proof`, `ack`, and
-`padding` frames may be sent. Proofs are omitted only in invitation sessions
+link key. Until both proofs are verified, only `device proof`, `rekey`,
+`rekey reply`, `ack`, and `padding` frames may be sent. Proofs are omitted only in invitation sessions
 whose invitee has no identity yet, and in the restore case.
 
 Both sides re-check the peer's log whenever it changes, and close the
