@@ -336,6 +336,7 @@ to the phrase, and only the phrase can open.
 
 **Cost.** One ML-KEM key in the log, and one more seeded key derivation.
 
+Amended by D34: the recovery public key belongs to the root key.
 ---
 
 ### D18. Changing guardians waits as long as a recovery
@@ -483,6 +484,7 @@ and releasing shares only on confirmation means no share leaves early.
 to change one's mind. A stolen guardian device can sign with an old log
 head, so a recovery is only as safe as a majority of guardians' devices.
 
+Amended by D30 and D31: conflicting decisions freeze the identity, and confirmations live in the guardians' own logs.
 ---
 
 ### D25. Guardians approve changes to guardians
@@ -506,6 +508,7 @@ People should name enough guardians that a majority stays reachable for
 years. An identity with no guardians has no protection against a phrase
 thief beyond the contest itself.
 
+Amended by D30: a conflict between guardian decisions freezes the identity; nothing ends it.
 ---
 
 ### D26. Nobody at the top removes a peer
@@ -548,6 +551,7 @@ nothing it can check; a choice of parents does.
 **Cost.** A thief's work that the person's other devices built on before
 the theft was noticed is kept. Before anyone noticed, it was trusted.
 
+Amended by D33: a recovery also revokes every entry concurrent with it.
 ---
 
 ### D28. History is never pruned by protocol
@@ -567,3 +571,134 @@ space, chosen by its owners, and accepted by its members by joining.
 **Cost.** Someone must keep full history for a space to survive the loss of
 its full holders. Moving to a successor is visible to members, and late
 changes to the old space must be re-applied by hand.
+
+---
+
+### D29. The authority rules are a program, checked by machine
+
+**Choice.** Which identity and space entries are valid is defined by a
+small stratified logic program ([model/rules.md](model/rules.md)), with a
+checker, a reference evaluator, targeted scenarios for every review
+finding, and a fuzzer that writes adversarial histories.
+
+**Replaces.** Validity rules written only in prose.
+
+**Why.** Four reviews in a row found the same kind of flaw: a set of
+entries with no consistent reading, or with two. Each prose fix closed one
+hole and opened a subtler one, because nobody can check rules with "not"
+in them for loops by reading. A stratified program has exactly one result,
+and whether a program is stratified is a mechanical check. The fuzzer found
+a real flaw (D33) within minutes of running.
+
+**Cost.** Implementers read a few dozen lines of logic beside the prose,
+and the model must be kept in step with the specification.
+
+---
+
+### D30. What no rule can settle freezes the identity
+
+**Choice.** Guardians who decide both ways under one policy, a root contest
+with no guardians, and guardians named by one side of such a contest make an
+identity **frozen**: permanently, visibly, and with no protocol way back.
+The person starts a new identity, and contacts recognize it in person.
+
+**Replaces.** Conflict rules under which neither decision was in effect,
+which let a later conflict revive keys a recovery had removed, or hold an
+identity hostage forever (D25); and ignoring decisions under a replaced
+policy (D25), which a late confirmation could turn into undoing one.
+
+**Why.** These are cases where no one stands above the parties. Any rule
+that picked a winner could be gamed by the loser writing with old parents.
+Freezing is honest, and it is monotone, so it cannot be used to undo
+anything. The protocol adds capability to relationships people already
+have; it need not pretend to replace them when the evidence runs out.
+
+**Cost.** Stated plainly in [identity.md](spec/identity.md#what-recovery-cannot-do):
+a colluding majority of current guardians can do anything; a thief holding
+a guardian's keys casts that guardian's vote; without guardians, two holders
+of the phrase freeze the identity; a phrase that was in use while the
+identity had no guardians can freeze it later; former guardians acting
+together on a policy they replaced can freeze it. A decision is never
+switched off by a later one, so a decision made under a policy already
+changed in its own past freezes the identity rather than being ignored: the
+fuzzer showed that ignoring it would let a late confirmation undo a
+recovery. Starting over is slow and manual,
+and scammers will imitate it, so the warnings software shows must evolve
+([later.md](later.md#starting-over)).
+
+---
+
+### D31. Guardians confirm in their own logs
+
+**Choice.** `endorse` and `confirm` are entries in the guardian's own
+identity log, judged as of their own causal past. A `recover` entry is
+signed by the new root key it names.
+
+**Replaces.** Confirmations written into the recovering identity's log,
+signed by a guardian key checked at a head the confirmation cited.
+
+**Why.** Judging a guardian's key at a cited head ignored the guardian's own
+rules, and let one stolen guardian phrase mint keys at will. In the
+guardian's own log, the guardian's revocation rules apply, the guardian's
+other devices see every confirmation, and judging each one as of its own
+past makes guardianship between friends who guard each other well-founded.
+
+**Cost.** A thief who steals a guardian's device can still confirm with
+parents from before the guardian removed it. A majority of guardians is
+still needed.
+
+---
+
+### D32. Roles belong to memberships
+
+**Choice.** Each `add_member` creates a membership with a fixed role, and
+every space entry names the membership it is written under. Changing a role
+ends one membership and adds another in the same entry. `set_role` is gone.
+
+**Replaces.** Roles held by identities and changed in place.
+
+**Why.** With roles held by identities, the role an entry was written under
+depended on which role changes were valid, which depended on roles: a loop.
+Fixed roles per membership make the layers by role static. They also fix
+two review findings: adding an existing member can no longer demote them,
+and a removed member can be added again and write.
+
+**Cost.** Sixteen bytes per space entry, and a new membership id after every
+change of role.
+
+---
+
+### D33. A recovery revokes work done without knowledge of it
+
+**Choice.** Every entry concurrent with a recovery in effect is invalid,
+whoever signed it, including entries by keys the recovery keeps.
+
+**Replaces.** Recoveries that kept the concurrent work of kept keys.
+
+**Why.** The fuzzer found that a thief holding a key the recovery kept
+could add keys with old parents that survived the recovery. A recovery is a
+reset to a point the guardians chose; work that did not know about it has
+no claim to survive it.
+
+**Cost.** Honest work done on a kept device during the waiting period, by a
+device that had not yet seen the recovery, is discarded. Devices sync the
+pending recovery during the wait, so this is rare.
+
+---
+
+### D34. The recovery key belongs to the root
+
+**Choice.** The recovery public key is published with the root key, in its
+`add_key` or `recover`. A new phrase brings its recovery key into effect at
+once.
+
+**Replaces.** The recovery public key in `set_recovery`, which after
+genesis needs guardians' confirmation.
+
+**Why.** A review showed that after a phrase was exposed, new encryption
+keys were sealed to the old phrase until guardians confirmed a policy
+change, or forever without guardians. The recovery key is the root's own
+secret, so it needs no one's approval.
+
+**Cost.** None beyond moving a field.
+

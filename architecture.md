@@ -157,18 +157,26 @@ had to ask permission from anyone outside the station.
 A thief steals Ana's recovery phrase and replaces her root key with one of
 his own. Ana's software notices, and with her phrase replaces the root
 itself, from before the theft. Her log now has two roots, and every contact
-who syncs it sees the fork: the identity is **contested**. The thief asks her
-guardians to approve new guardians, but guardians approve changes to
-themselves, and they check with Ana first. Ana calls her guardians. Three of
-the five friends she named endorse a recovery that gives her new phone the
-root and keeps her laptop. Each guardian's software compares a short
-fingerprint with Ana's new phone, then waits a week. The thief objects,
-which doubles the wait, but cannot stop it. When the wait is over, the
-guardians confirm, each confirmation carrying a piece of the key that opens
-Ana's data. Once three have confirmed, the recovery is in effect for
-everyone who holds those entries, whenever they arrive. Everything the
-thief did is discarded, and Ana writes down a new phrase. Physics cannot
-tell two holders of the same secret apart, but her friends can.
+who syncs it sees the fork: the identity is **contested**. While it is,
+neither root can add or remove keys, so the thief cannot lock Ana's laptop
+out. The thief asks her guardians to approve new guardians, but guardians
+approve changes to themselves, and they check with Ana first. Ana calls her
+guardians. Ana's new phone writes a recovery that gives it the root and
+keeps her laptop, and three of the five friends she named endorse it in
+their own logs. Each guardian's software compares a short fingerprint with
+Ana's new phone, then waits a week. The thief objects, which doubles the
+wait, but cannot stop it. When the wait is over, the guardians confirm,
+each confirmation carrying a piece of the key that opens Ana's data. Once
+three have confirmed, the recovery is in effect for everyone who holds
+those entries, whenever they arrive. Everything the thief did is discarded,
+and Ana writes down a new phrase. Physics cannot tell two holders of the
+same secret apart, but her friends can.
+
+Had Ana named no guardians, nobody could have told her from the thief. Her
+identity would have been **frozen**: shown to every contact as no longer
+trustworthy, and replaced by a new one that each contact recognizes in
+person. The protocol adds to relationships people already have; when the
+evidence runs out, it hands the decision back to them.
 
 ## What is deliberately not here yet
 

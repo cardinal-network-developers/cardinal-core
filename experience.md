@@ -61,7 +61,8 @@ Key, certificate, scope, epoch, entry, blob, chunk, hash, session, host
   everything returns.
 - **Someone has my words.** The software notices the conflicting change,
   says so plainly, and walks the person through asking guardians to settle
-  it.
+  it. Without guardians, it says that the identity is frozen and helps the
+  person start over.
 - **Beyond recovery.** With no words, no device, and no guardians able to
   act, nothing can prove the old identity is yours. You make a new one and
   ask each contact, by whatever human means you share, to replace the old
@@ -69,6 +70,13 @@ Key, certificate, scope, epoch, entry, blob, chunk, hash, session, host
   offers to copy your shared spaces' contents into new spaces with you.
   This is slow and manual by design: anything faster would also work for a
   thief.
+- **A contact asks to be replaced.** This is exactly what a scammer would
+  ask, so the software slows the person down. Before replacing anyone it
+  says, in substance: "Only do this if you have confirmed it is really
+  them, in person or by voice. Scammers pretend to be friends who lost
+  their account." It shows when the old identity was frozen, and why, and
+  never offers to replace a contact whose old identity is still in good
+  standing.
 - **Starting fresh.** A space whose history has grown too long, or a
   friendship that has gone wrong, is succeeded by a new space. What should
   carry over does; the old one can be archived or dropped.

@@ -250,11 +250,11 @@ sheet. Software updates the sheet's host whenever hosts change.
    everything else: other hosts, labels, spaces, and contacts.
 
 A device restored through guardians instead holds the new root key named in
-the `recover` entry. Guardians' devices deliver their entries to the
-recovering identity's hosts, so once the recovery is in effect there, the
-same steps work with that root, except that in step 5 the device opens the
-guardian wrap with the guardian key it rebuilt from the shares in the
-guardians' confirmations.
+the `recover` entry. Guardians' devices deliver the `recover` entry, and
+their own logs with their confirmations, to the recovering identity's hosts,
+so once the recovery is in effect there, the same steps work with that root,
+except that in step 5 the device opens the guardian wrap with the guardian
+key it rebuilt from the shares in the guardians' confirmations.
 
 ## Staying reachable
 

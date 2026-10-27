@@ -21,10 +21,12 @@ Kinds below are profile-local uints. Fields are numbered per kind.
 
 ## Shared rules (normative)
 
-- **Author-owned nodes.** A node created with field 15 = 1 may be changed or
-  deleted only by its creator's identity. Messages, reach nodes, and read
-  markers are author-owned. An entry with an op on such a node by anyone
-  else is ignored as a whole ([state.md](state.md#operations)).
+- **Author-owned nodes.** A node created with field 15 = 1 may be set,
+  moved, deleted, or restored only by its creator's identity. Messages,
+  reach nodes, and read markers are author-owned. Anyone may create a node
+  under one, as a reaction under a message. An entry with any other op on
+  such a node by anyone else is not accepted for state, as a whole
+  ([state.md](state.md#operations)).
 - **Reach.** Every profile except account may contain one reach node per
   member (see [Reach](#reach)).
 
@@ -132,7 +134,7 @@ choice.
 ## Group
 
 A group space is a relationship space with any number of members and the full
-set of [roles](spaces.md#roles). Families, teams, clubs, and congregations
+set of [roles](spaces.md#memberships). Families, teams, clubs, and congregations
 are groups. Members who are not direct contacts of each other can still
 reach each other through the group's reach nodes, but only about that
 group's space.

@@ -25,6 +25,7 @@ with exactly one signature, by a device or admin key of the author.
 | 6 | time | uint | author's clock in milliseconds; display only |
 | 7 | epoch | bytes(16) | id of the epoch this entry is encrypted under |
 | 8 | wraps hash | bytes(32) | `BLAKE3` of the encoded wraps list, when the sealed entry carries wraps |
+| 9 | membership | bytes(16) | id of the author's [membership](#memberships) this entry is written under; absent in genesis and in entries of only `keep` ops |
 
 - The **entry id** is the id of the signed object. Parents, node ids, and
   deduplication all use entry ids.
@@ -71,35 +72,37 @@ authors, structure, or content.
 **Validity and state are pure functions of the set of entries**, together
 with the identity logs of the space's members. Every member that holds the
 same entries and logs computes the same membership, epochs, and state,
-whatever order things arrived in and whatever its clock says.
+whatever order things arrived in and whatever its clock says. The normative
+rules are the `space` program in [model/rules.md](../model/rules.md), which
+is [stratified](identity.md#evaluating-a-log) like the identity rules.
 
-An entry is **attributable** if its signing key is a device or admin key of
-the author, effective at the cited head of the author's identity log, as
-[evaluated](identity.md#evaluating-a-log) from the whole log the verifier
-holds. A key whose adding entry is invalid was never added, and nothing it
-signed is attributable.
+The first layer decides whether an entry's signature **counts as its
+author's**. It depends only on the author's identity log, never on who is a
+member, so it cannot loop through membership:
 
-Whether an attributable entry stays valid depends on what has happened to
-its key since:
-
-- **still effective**: valid;
-- **removed**: valid only if the entry is **witnessed**.
+- the signing key must be a device or admin key of the author, in effect at
+  the cited head of the author's identity log, as
+  [evaluated](identity.md#evaluating-a-log) from the whole log the verifier
+  holds. A key whose adding entry is invalid was never added;
+- the author must not be [frozen](identity.md#frozen-identities);
+- if the key has since been removed, the entry must be **witnessed**.
 
 A key may have been sold, broken, or stolen; the space cannot tell which,
 and a sold laptop whose key was never wiped could otherwise write as its old
-owner forever, citing an old log head. An entry by key `K` is witnessed if it
-is an ancestor of, or is listed by, a valid entry of the same author that:
+owner forever, citing an old log head. An entry by key `K` is witnessed if
+it is an ancestor of, or is listed by, an entry of the same author whose
+signature counts and that:
 
-- is signed by another key that is effective at its cited head, and cites a
-  head that does not contain the removal of `K`; or
+- is signed by another key, and cites a head that does not contain the
+  removal of `K`; or
 - contains a `keep` op for `K` that lists it or one of its descendants.
 
 A device's entries are thus kept if its own identity built on them while it
 still trusted the device, or if the person chose to keep them afterwards.
 The person's other devices are the only witnesses whose word counts. Other
-members building on an entry does not save it. A witness must itself be
-valid; since a witness is always a descendant of what it witnesses, validity
-can be computed from the newest entries backward.
+members building on an entry does not save it. An entry of only `keep` ops
+needs no membership, so a person can keep their old work in a space they
+have since left, or after a recovery that kept none of their keys.
 
 **Witnessing is ordinary.** Every write by one of a person's devices
 witnesses everything of theirs it has seen. That includes, unavoidably,
@@ -117,35 +120,49 @@ protocol:
   those the person recognizes, up to the point they choose.
 
 Entries a thief wrote after that point are not ancestors of what is kept, so
-they stay invalid. The same `keep` serves a recovery from nothing, when no
-device was left to witness.
+they stay invalid.
 
 Software MUST show the person when entries are discarded for these reasons.
 Validity converges as identity logs spread. Members MAY hold an entry back
 until they have the author's log.
 
-## Roles
+## Memberships
 
-| Role | Value | May add | May remove or downgrade |
+Roles belong to **memberships**, not to identities. Each `add_member` op
+creates a membership: one identity, one role, fixed for the membership's
+life. Its id is the first 16 bytes of `BLAKE3(entry id || varint(i))`,
+where `i` is the position of the op in its entry, as for
+[node ids](state.md#nodes). The genesis creates its author's membership, as
+owner, the same way from its `start` op. Every entry names, in field 9, the
+membership it is written under.
+
+- **Ending** a membership is `remove_member` with its id. A member may end
+  its own membership at any time: that is leaving.
+- **Changing a role** is ending one membership and adding another for the
+  same identity, in the same entry.
+- **Adding someone who is already a member** creates a second membership. It
+  changes nothing about the first, so it cannot be used to demote anyone.
+- An identity may be added again after its membership ended.
+
+| Role | Value | May add | May end |
 |---|---|---|---|
-| reader | 0 | | itself |
-| writer | 1 | | itself |
-| admin | 2 | readers, writers, admins | readers, writers; itself |
-| owner | 3 | anyone | admins, writers, readers; itself |
+| reader | 0 | | its own |
+| writer | 1 | | its own |
+| admin | 2 | readers, writers, admins | readers', writers'; its own |
+| owner | 3 | anyone | admins', writers', readers'; its own |
 
 Readers receive epoch keys and read; the only entries they write are their
-own reach node, `keep` ops, and their own removal. Writers also append
+own reach node, `keep` ops, and their own leaving. Writers also append
 application ops and rotate epochs. Owners also change policy and
-[succeed](#succession) the space. The author of the genesis entry is an
-owner.
+[succeed](#succession) the space.
 
-As in identity logs, **no member can remove or downgrade another of equal
+As in identity logs, **no member can end the membership of another of equal
 role**. Owners cannot remove owners. Every conflict has a higher arbiter, and
 above the owners stand their identities: a compromised owner device is
 removed in the owner's identity log, and a compromised owner identity is
-recovered by its guardians. Owners who disagree with each other do not fight
-inside the space; any of them can [succeed](#succession) it with the
-members they choose.
+recovered by its guardians, or frozen. Owners who disagree with each other do
+not fight inside the space; any of them can [succeed](#succession) it with
+the members they choose.
 
 ## Control operations
 
@@ -155,13 +172,13 @@ ones).
 
 | Op | Name | Fields |
 |---|---|---|
-| 1 | `create` | 1: profile (uint or bytes(32)); 2: policy; 3: id of the space this one [succeeds](#succession), if any; 4: initial state: [blob reference](blobs.md#references) to a [canonical state](state.md#canonical-state). Genesis only. |
-| 2 | `add_member` | 1: identity id; 2: role |
-| 3 | `set_role` | 1: identity id; 2: role |
-| 4 | `remove_member` | 1: identity id |
+| 1 | `start` | 1: profile (uint or bytes(32)); 2: policy; 3: id of the space this one [succeeds](#succession), if any; 4: initial state: [blob reference](blobs.md#references) to a [canonical state](state.md#canonical-state). Genesis only. |
+| 2 | `add_member` | 1: identity id; 2: role. Creates a [membership](#memberships). |
+| 3 | | reserved |
+| 4 | `remove_member` | 1: membership id |
 | 5 | `rotate` | 1: list of `{1: epoch id, 2: key}`: the keys of every epoch this one supersedes, only if history is shared |
 | 6 | `set_policy` | 1: policy |
-| 7 | `keep` | 1: signing key of a removed device of the author; 2: list of entry ids by that key ([Authors](#authors)) |
+| 7 | `keep` | 1: a removed signing key of the author; 2: list of entry ids by that key ([Authors](#authors)) |
 | 8 | `succeed` | 1: id of the successor space ([Succession](#succession)) |
 
 **Policy** is a record:
@@ -174,17 +191,22 @@ ones).
 
 ## Evaluating membership
 
-Membership follows the rules of [identity logs](identity.md#evaluating-a-log),
-with members in place of keys and roles in place of powers:
+After authors, the rules work in layers by role, from owners down to
+readers:
 
-- An entry is **valid** if it is attributable, authorized by the membership
-  state built from its valid ancestors, and an ancestor of every valid
-  removal or downgrade of its author by another member.
-- A member leaving (removing itself) is a retirement: its earlier and
-  concurrent entries stay.
-
-Because only a strictly higher role can remove or downgrade a member, these
-rules never loop, and backdating gains nothing at any role.
+- An entry is **valid** if its signature counts as its author's, its
+  membership was created by a valid entry in its causal past, its ops are
+  allowed to that membership's role, and its membership had not ended in its
+  causal past.
+- An entry **concurrent with the end of its membership** is invalid, unless
+  the end was a change to a lower role and the entry's ops are allowed to
+  the new role. So a demoted admin's concurrent messages stand, and their
+  concurrent `add_member` does not.
+- A membership's end counts only if it was written by a valid entry of a
+  strictly higher role, or by the member leaving. Because every end comes
+  from a higher layer, these rules never loop, and backdating gains nothing
+  at any role: an entry written with old parents after an end is concurrent
+  with it.
 
 ## Succession
 
@@ -192,10 +214,18 @@ A space can be **succeeded** by a new one. Succession is how a space starts
 fresh, how a history is bounded, and how owners part ways.
 
 An owner writes `succeed`, naming a successor space it has created. The
-successor's genesis has `create` field 3 naming the old space and field 4
+successor's genesis has `start` field 3 naming the old space and field 4
 holding the old space's state, computed from the `succeed` entry's causal
 past, as its initial state. Node ids carry over, so references into the old
-state still resolve. The successor's members, roles, and policy are whatever
+state still resolve. In the successor, the genesis counts as descending from
+every entry whose values it carries, so the first `set` of a carried field
+settles any conflict carried with it.
+
+A member who holds the old space MUST check that the initial state is what
+it computes at the `succeed` entry, and MUST NOT accept the successor if it
+is not. A member who does not hold the old space cannot check, so software
+shows carried content as carried over by the successor's creator, not as
+written by its original authors. The successor's members, roles, and policy are whatever
 its genesis says. Its history starts at genesis; the old space's history
 stays where it is, for those who keep it.
 
@@ -204,9 +234,9 @@ A `succeed` is the owner leaving the old space, with a forwarding address:
 - If owners remain, the old space continues among its remaining members.
   Members of the old space are offered the successor if its genesis added
   them, and may belong to both.
-- When the last owner leaves by `succeed`, the old space is **closed**: an
-  entry is invalid if the membership state built from its causal past has
-  no owners, and the last owners in it left by `succeed`. Entries
+- After a `succeed`, an entry that descends from it and has no owner
+  membership in effect in its causal past is invalid: once its last owner
+  has left, the old space is **closed**. Entries
   concurrent with a `succeed`, written by members who had not seen it, stay
   valid in the old space. Software shows them in the successor as changes to
   re-apply, like any conflict, and never applies them silently.

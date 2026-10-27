@@ -91,8 +91,9 @@ members' software agrees on the schedule. See
 ## Starting over
 
 Some losses are beyond recovery: the words are gone, no device survives,
-and the guardians cannot reach a threshold, or the identity is contested in
-a way only they could settle and they will not. Physics offers no proof of
+and the guardians cannot reach a threshold, or the identity is
+[frozen](spec/identity.md#frozen-identities) because the evidence cannot say
+who is who. Physics offers no proof of
 who the person is, so the protocol offers none either. The person starts a
 new identity, and each contact replaces the old one by hand, after checking
 by whatever human means they trust.
@@ -112,3 +113,9 @@ make the process bearable:
 
 The corner cases are many. None needs protocol support beyond what exists,
 and none should be automated so far that a thief could use it.
+
+The warnings software shows when a contact asks to be replaced
+([experience.md](experience.md#things-that-go-wrong)) are a starting point.
+Scammers will find tactics no one has thought of yet, and the wording, the
+friction, and the checks software asks for must change as those tactics
+become known.

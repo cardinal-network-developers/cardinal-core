@@ -34,7 +34,11 @@ before anything is frozen.
 | [contact.md](spec/contact.md) | invitations, pairing, introductions |
 | [profiles.md](spec/profiles.md) | account, files, relationship, group, public |
 
-6. [later.md](later.md): designed for, not yet specified.
+6. [model/](model/): the authority rules as a checked logic program, which
+   is normative for which identity and space entries are valid, with a
+   checker, scenarios for every review finding, and an adversarial fuzzer.
+   See [model/README.md](model/README.md).
+7. [later.md](later.md): designed for, not yet specified.
 
 ## The five concepts
 
@@ -49,9 +53,11 @@ before anything is frozen.
 ## First milestone
 
 One person, several devices, a folder that is the same everywhere, with
-history and conflict copies. That needs encoding, crypto, identity (without
-guardians), spaces, state, blobs, sync, link, pairing, local discovery, and
-one host. It must replace a real rsync job before anything else is built.
+history and conflict copies. That needs encoding, crypto, identity, spaces,
+state, blobs, sync, link, pairing, local discovery, and one host. It must
+replace a real rsync job before anything else is built. Guardians can wait
+for the milestone after, but an identity without them is frozen, not
+recovered, if its phrase is stolen; the first build should say so.
 
 ## Relationship to earlier work
 

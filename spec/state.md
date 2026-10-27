@@ -51,14 +51,23 @@ Profile op numbers start at 32. These are shared by every profile:
 A profile may restrict which kinds may be created where, and which fields
 exist.
 
-An entry is checked as a whole. If any of its ops violates the profile,
-breaks the author-owned rule ([profiles.md](profiles.md#shared-rules-normative)),
-or names a node whose `create` is not in a valid entry in the entry's causal
-past or in the entry itself, the whole entry is ignored for state, though it
-still syncs. These checks depend only on the entry and its causal past, so
-every device makes the same decision. A reply to a message that is later
-found invalid is therefore ignored too; software shows both as discarded. A move skipped to prevent a cycle is not a
-rejection; it is part of the merge, below.
+A valid entry is **accepted for state** unless any of its ops violates the
+profile, breaks the author-owned rule
+([profiles.md](profiles.md#shared-rules-normative)), or names a node whose
+`create` is not in an accepted entry in the entry's causal past or in the
+entry itself. A rejected entry is ignored as a whole for state, though it
+still syncs. A node is **named** by:
+
+- field 1 of `set`, `move`, `delete`, and `restore`;
+- field 2 of `create` and of `move` (the parent);
+- any field a profile declares to hold a node id, such as a message's "in
+  reply to".
+
+These checks depend on the entry, its causal past, and which entries are
+valid, so every device that holds the same entries and identity logs makes
+the same decision. A reply to a message that is later found invalid is
+therefore ignored too; software shows both as discarded. A move skipped to
+prevent a cycle is not a rejection; it is part of the merge, below.
 
 ## Merge rules
 
@@ -130,8 +139,12 @@ at a point, so that a device can start there instead of at the beginning.
 | 2 | state root: `BLAKE3` of the canonical state at that frontier |
 | 3 | state blob: [blob reference](blobs.md#references) to the canonical state |
 
-A checkpoint changes nothing about the state. It is a claim about what the
-state was, which anyone holding the history can check.
+A checkpoint changes nothing about the state. It is a claim about the state
+of the valid entries in its frontier's causal past, which anyone holding the
+history can check. Validity can change after a checkpoint is written, when a
+removal or a recovery arrives later, so a checkpoint that was true can
+become false. Holders check checkpoints against what they know now, and a
+light holder treats such a change as one of its triggers below.
 
 ### Canonical state
 
@@ -158,10 +171,15 @@ A device short on storage MAY instead run as a **light holder**:
   reconciles the space's set like any holder, and omits their content when
   asked for them ([sync.md](sync.md#fetching-objects)).
 - It applies directly only entries whose causal past includes every entry of
-  the checkpoint's frontier. For any other entry, and whenever a member's
-  identity log gains a removal or a recovery, it fetches the full history
-  from a full holder and recomputes, or asks a full holder of its own
-  identity for a new checkpoint.
+  the checkpoint's frontier. It fetches the full history from a full holder
+  and recomputes, or asks a full holder of its own identity for a new
+  checkpoint, when any of these arrives:
+  - an entry that does not descend from the whole frontier;
+  - a `keep` op, or an entry that cites a head of its author's log older
+    than the author's latest head it has seen, since either can witness
+    entries before the checkpoint;
+  - in any member's identity log: a removal, a guardian decision, or a
+    change in whether the identity is contested or frozen.
 
 Being light is a local choice that never changes a result. It depends on
 someone keeping the full history: every space MUST have at least one **full
