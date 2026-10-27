@@ -23,7 +23,8 @@ Kinds below are profile-local uints. Fields are numbered per kind.
 
 - **Author-owned nodes.** A node created with field 15 = 1 may be changed or
   deleted only by its creator's identity. Messages, reach nodes, and read
-  markers are author-owned. Ops by anyone else on such a node are ignored.
+  markers are author-owned. An entry with an op on such a node by anyone
+  else is ignored as a whole ([state.md](state.md#operations)).
 - **Reach.** Every profile except account may contain one reach node per
   member (see [Reach](#reach)).
 
@@ -42,7 +43,7 @@ with anyone else.
 | 4 | device | 1: device key; 2: name; 3: is always on; 4: is a host for this identity |
 | 5 | secret | 1: purpose (text); 2: value (bytes). Holds the discovery secret and similar. |
 | 6 | setting | 1: name (text); 2: value |
-| 7 | placement | under a space node: 1: device key; 2: retention policy; 3: where the device shows the space, such as a folder path |
+| 7 | placement | under a space node: 1: device key; 2: retention policy; 3: where the device shows the space, such as a folder path; 4: light holder ([state.md](state.md#light-holders)) |
 | 8 | storage label | under a host node: 1: label; 2: space id; 3: 0 entries, 1 chunks |
 | 9 | token | under a host node: 1: token; 2: space id; 3: revoked (bool) |
 | 10 | invitation | 1: invitation record; 2: cancelled (bool) |

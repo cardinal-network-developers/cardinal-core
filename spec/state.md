@@ -7,8 +7,10 @@ to: a tree of nodes. Every profile ([profiles.md](profiles.md)) uses this one
 tree. A files space puts folders and files in it, a conversation puts
 messages in it, and an account space puts contacts and settings in it.
 
-Every member computes the same state from the same set of entries, with no
-coordination, and no merge ever discards data silently. Entries are discarded
+**State is a pure function of the set of entries** and the members'
+identity logs. Every member computes the same state from the same set, with
+no coordination, whatever order entries arrived in, and no merge ever
+discards data silently. Entries are discarded
 only for reasons of authority ([spaces.md](spaces.md#authors)), and software
 shows when that happens.
 
@@ -51,10 +53,11 @@ exist.
 
 An entry is checked as a whole. If any of its ops violates the profile,
 breaks the author-owned rule ([profiles.md](profiles.md#shared-rules-normative)),
-or names a node whose `create` is not in the entry's causal past or in the
-entry itself, the whole entry is ignored for state, though it still syncs.
-These checks depend only on the entry and its causal past, so every device
-makes the same decision. A move skipped to prevent a cycle is not a
+or names a node whose `create` is not in a valid entry in the entry's causal
+past or in the entry itself, the whole entry is ignored for state, though it
+still syncs. These checks depend only on the entry and its causal past, so
+every device makes the same decision. A reply to a message that is later
+found invalid is therefore ignored too; software shows both as discarded. A move skipped to prevent a cycle is not a
 rejection; it is part of the merge, below.
 
 ## Merge rules
@@ -116,74 +119,59 @@ and respects causality: a reply always comes after what it replies to.
 
 ## Checkpoints
 
-A long history is a cost for a new device. A **checkpoint** lets a device
-start from a recent state instead of the beginning.
+A long history is a cost for a new device. A **checkpoint** records the state
+at a point, so that a device can start there instead of at the beginning.
 
 `checkpoint` op fields:
 
 | Key | Field |
 |---|---|
 | 1 | frontier: the ids of the entries whose state this describes (the entry's own parents) |
-| 2 | state root: hash of the canonical state at that frontier |
+| 2 | state root: `BLAKE3` of the canonical state at that frontier |
 | 3 | state blob: [blob reference](blobs.md#references) to the canonical state |
-| 4 | prunable: 1 if the author proposes that entries before the frontier may be dropped |
 
-The **canonical state** is the encoding of a list of node records, sorted by
-node id. Each node record is `{1: id, 2: kind, 3: parent, 4: name, 5: fields
-as a list of {1: key, 2: list of {1: entry id, 2: value}}, 6: deleted,
-7: position writer, 8: delete conflict}`. Values are sorted by the id of the
-entry that wrote them, and field 7 is the id of the entry whose `create` or
-`move` set the current position. The **state root** is `BLAKE3` of that
-encoding. Membership and epochs are not part of it; they are always computed
-from control entries, which are never pruned.
+A checkpoint changes nothing about the state. It is a claim about what the
+state was, which anyone holding the history can check.
 
-### Barriers
+### Canonical state
 
-A checkpoint that may be pruned changes the rules, for everyone, so that
-pruning cannot change the result.
+The **canonical state** is the record `{0: 13, 1: list of node records}`,
+sorted by node id. Each node record is `{1: id, 2: kind, 3: parent, 4: name,
+5: fields as a list of {1: key, 2: list of {1: entry id, 2: value}}, 6:
+deleted, 7: position writer, 8: delete conflict, 9: creator identity}`.
+Values are sorted by the id of the entry that wrote them, and field 7 is the
+id of the entry whose `create` or `move` set the current position. Membership
+and epochs are not part of it; they are computed from control entries.
 
-A **barrier** is a valid prunable checkpoint written by an owner. If two
-prunable checkpoints are concurrent, only the one earlier in log order is a
-barrier. An owner MUST NOT write a prunable checkpoint that does not descend
-from every barrier it knows. Software SHOULD let one always-on device of one
-owner write them, rarely, such as monthly.
+The canonical state is also how a [successor space](spaces.md#succession)
+starts.
 
-With a barrier `B` whose frontier is `F`, every holder, pruned or not,
-computes state the same way:
+### Light holders
 
-1. The state at `F` is the canonical state in `B`. Decisions about entries
-   in `F`'s causal past are final: an entry the checkpoint included stays,
-   even if a removal that would invalidate it arrives later.
-2. Every other valid entry is applied on top of that state, in log order
-   among themselves.
-3. For every merge rule, each entry in `F`'s causal past counts as an
-   ancestor of each entry that is not. A late entry concurrent with `F`
-   therefore never reorders, outvotes, or blocks anything before the
-   barrier.
+The state is defined over the full history, and nothing in this
+specification lets a holder drop entries and still claim to compute it.
+A device short on storage MAY instead run as a **light holder**:
 
-A member whose own computation of the state at `F` differs from `B`'s state
-root SHOULD tell its person; the barrier still holds. A checkpoint by a key
-later found to be compromised is invalid unless witnessed, like any entry
-([spaces.md](spaces.md#authors)), and then it was never a barrier.
+- It starts from a checkpoint written by a key of **its own identity**. It
+  trusts its own devices; it trusts no one else's checkpoint.
+- It keeps the sealed ids of the entries before the checkpoint, so that it
+  reconciles the space's set like any holder, and omits their content when
+  asked for them ([sync.md](sync.md#fetching-objects)).
+- It applies directly only entries whose causal past includes every entry of
+  the checkpoint's frontier. For any other entry, and whenever a member's
+  identity log gains a removal or a recovery, it fetches the full history
+  from a full holder and recomputes, or asks a full holder of its own
+  identity for a new checkpoint.
 
-### Pruning
+Being light is a local choice that never changes a result. It depends on
+someone keeping the full history: every space MUST have at least one **full
+holder** per member identity that wants the space to survive, either one of
+its devices or a storage host. The account space records which devices are
+light ([profiles.md](profiles.md#account)), and software warns when a space
+has no full holder.
 
-Pruning drops the content of entries in the latest barrier's frontier's
-causal past. Entries containing control operations
-([spaces.md](spaces.md#control-operations)) are never pruned. A holder that
-prunes keeps the ids of the pruned entries, so that it can tell whether an
-arriving entry's parents exist and whether an entry is before the barrier.
-
-The space's sync set excludes pruned entries for every holder, so holders
-that pruned and holders that did not still agree on the set
-([sync.md](sync.md#sets)). Full history remains available, from holders that
-keep it, under the history label.
-
-A device MAY start from a checkpoint written by its own identity or by a
-space owner, and MUST NOT start from anyone else's. The checkpoint's state
-blob is the record `{0: 13, 1: canonical state, 2: ids of every entry in the
-frontier's causal past}`. The device verifies the state root against field
-1, checks that the frontier's ids are in field 2, and continues from there.
+To bound history itself, rather than one device's copy of it, a space is
+[succeeded](spaces.md#succession).
 
 ## Cost
 

@@ -146,27 +146,29 @@ A research station loses its uplink for six months. Inside the station,
 everyone's devices keep syncing with each other through the station's own
 hosts. People still message, share, add devices, and even remove compromised
 devices. When the link returns, every space and identity log reconciles
-deterministically. Revocations made inside the station take effect outside
+deterministically: what a set of entries means never depends on when or in
+what order they arrived. Revocations made inside the station take effect outside
 as soon as the logs propagate, and changes a revoked device made that none
 of its owner's other devices had seen are discarded on both sides. Nobody
 had to ask permission from anyone outside the station.
 
 ## Walkthrough: identity theft
 
-A thief steals Ana's recovery phrase, adds a new root key to her log, and
-removes her old one. Ana's software notices, and with her phrase writes a
-removal of the thief's root, from before the theft. Her log now has two
-conflicting changes to its roots, and every contact who syncs it sees the
-fork: the identity is **contested**. The thief tries to replace her
-guardians, but a change of guardians waits as long as a recovery does. Ana
-calls her guardians. Three of the five friends she
-named endorse a recovery that removes every key but a new root on Ana's new
-phone. The thief objects, which doubles the waiting period and alerts every
-guardian, but cannot stop it; only guardians can withdraw their endorsement.
-When the period ends, the recovery takes effect, everything the thief did
-concurrently is discarded, and Ana writes down a new phrase. Contacts follow
-the log. Physics cannot tell two holders of the same secret apart, but her
-friends can.
+A thief steals Ana's recovery phrase and replaces her root key with one of
+his own. Ana's software notices, and with her phrase replaces the root
+itself, from before the theft. Her log now has two roots, and every contact
+who syncs it sees the fork: the identity is **contested**. The thief asks her
+guardians to approve new guardians, but guardians approve changes to
+themselves, and they check with Ana first. Ana calls her guardians. Three of
+the five friends she named endorse a recovery that gives her new phone the
+root and keeps her laptop. Each guardian's software compares a short
+fingerprint with Ana's new phone, then waits a week. The thief objects,
+which doubles the wait, but cannot stop it. When the wait is over, the
+guardians confirm, each confirmation carrying a piece of the key that opens
+Ana's data. Once three have confirmed, the recovery is in effect for
+everyone who holds those entries, whenever they arrive. Everything the
+thief did is discarded, and Ana writes down a new phrase. Physics cannot
+tell two holders of the same secret apart, but her friends can.
 
 ## What is deliberately not here yet
 

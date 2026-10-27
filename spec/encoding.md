@@ -139,7 +139,7 @@ A tool that knows the schema MAY show field names instead of keys
 | 10 | public address | [contact.md](contact.md#following) |
 | 11 | envelope | [hosts.md](hosts.md#envelopes) |
 | 12 | bundle | [sync.md](sync.md#sneakernet-and-delay-tolerant-carriage) |
-| 13 | checkpoint state | [state.md](state.md#pruning) |
+| 13 | canonical state | [state.md](state.md#canonical-state) |
 | 14–63 | reserved for this specification | |
 
 Operation records inside entries carry their own small `op` numbers, defined

@@ -265,13 +265,16 @@ These were right, and survive essentially unchanged:
 
 ### D14. Physical time is used only locally
 
-**Choice.** No protocol decision depends on another party's clock. The only
-use of time with security meaning is the recovery waiting period, measured
-by each verifier's own clock.
+**Choice.** Validity and state are pure functions of the set of entries. No
+clock, local or remote, affects what a set of entries means. Local time
+affects only when software acts: when a guardian chooses to confirm a
+recovery, when a device rotates a token, when a reminder appears.
 
-**Why.** Clocks lie, drift, and do not agree across light-minutes. A waiting
-period measured locally means the same thing everywhere: this verifier has
-had this long to notice.
+**Why.** Clocks lie, drift, and do not agree across light-minutes. Worse, a
+rule that depends on when a verifier first saw something gives a different
+answer to a device that joins years later. The recovery waiting period is
+real, but it is measured by the guardians, who then sign, so the signature
+is what every verifier sees.
 
 ---
 
@@ -296,6 +299,8 @@ backdating is still possible; D21 says what happens then.
 **Cost.** Losing an admin device requires the recovery phrase or guardians.
 Losing a phone, the common case, does not.
 
+
+Amended by D26: owners and roots no longer remove each other.
 ---
 
 ### D16. Guardians decide recoveries; owners can only delay them
@@ -312,6 +317,8 @@ hold the same secret. A veto handed that decision back to whoever holds the
 secret. Separate endorsement entries also sync like any other entry, which
 multi-signature objects did not.
 
+
+Partly superseded by D24: guardians no longer withdraw; they decline to confirm.
 ---
 
 ### D17. The phrase is a key pair, not a symmetric key
@@ -346,6 +353,8 @@ old guardians the same chance to act that recovery gives the owner.
 
 **Cost.** Changing guardians takes a week by default.
 
+
+Superseded by D25.
 ---
 
 ### D19. Recoveries become final
@@ -364,6 +373,8 @@ were a veto by another name, which D16 removed.
 **Cost.** A guardian who changes their mind after the delay is too late.
 The delay is the time to change one's mind.
 
+
+Superseded by D24.
 ---
 
 ### D20. Removed devices' work is kept only if the owner witnessed it
@@ -384,6 +395,8 @@ common case lose nothing, and `keep` covers recovery from nothing.
 **Cost.** One small entry per space on each removal. Work a device did that
 no other device saw, and that the person does not choose to keep, is lost.
 
+
+Partly superseded by D27.
 ---
 
 ### D21. At the top, conflicts go to people
@@ -404,6 +417,8 @@ is that each keeps what they shared.
 **Cost.** A space can split, which software must present clearly. A thief
 with the phrase can force the owner to involve guardians.
 
+
+Superseded by D26.
 ---
 
 ### D22. Prunable checkpoints are barriers
@@ -424,6 +439,8 @@ holders, makes agreement exact.
 changes applied after the checkpoint's state, rather than interleaved. A late
 removal cannot invalidate entries the checkpoint already included.
 
+
+Superseded by D28.
 ---
 
 ### D23. Encryption keys form a chain
@@ -439,3 +456,114 @@ not read it, and a guardian whose own key had changed could not open their
 share.
 
 **Cost.** About 1.2 KB per replaced key, per key change, in the identity log.
+
+---
+
+### D24. Guardians confirm; verifiers count signatures
+
+**Choice.** Recovery has two guardian steps. `endorse` says a recovery is
+wanted and starts each guardian's wait. `confirm`, written after the wait on
+the guardian's own clock, is binding and carries the guardian's share. A
+recovery is in effect when a threshold of guardians has confirmed it.
+Objections double the guardians' wait and bind nothing else. Thresholds are
+majorities, and guardian software never confirms two decisions that do not
+know each other.
+
+**Replaces.** Waiting periods measured by every verifier, finality by the
+new root's first entry, and withdrawals (D16, D19).
+
+**Why.** A third review showed that any rule using a verifier's own clock
+gives a different answer to a verifier that joins later. A contact who
+received a two-year-old recovery all at once could reject it forever.
+Moving the clock to the guardians, who then sign, makes the outcome a fact
+about the entries. Without withdrawals, nothing can undo a recovery later,
+and releasing shares only on confirmation means no share leaves early.
+
+**Cost.** A guardian who confirms cannot take it back; the wait is the time
+to change one's mind. A stolen guardian device can sign with an old log
+head, so a recovery is only as safe as a majority of guardians' devices.
+
+---
+
+### D25. Guardians approve changes to guardians
+
+**Choice.** Every `set_recovery` after genesis is confirmed by a threshold
+of the guardians it replaces, like a recovery. Each guardian set has its own
+random guardian key, separate from the phrase, and changing guardians
+rotates the identity's encryption key.
+
+**Replaces.** Guardian changes that took effect after a wait measured by
+each verifier (D18), and shares of a seed derived from the phrase.
+
+**Why.** The wait was clock-dependent (D24). Approval by the old guardians
+is not: a phrase thief cannot install friendly guardians, and former
+guardians cannot recover with old parents without creating a visible
+conflict that only both majorities can end. A guardian key per set means
+former guardians cannot read data written after they were replaced.
+
+**Cost.** Replacing guardians needs a majority of the old ones to agree.
+People should name enough guardians that a majority stays reachable for
+years. An identity with no guardians has no protection against a phrase
+thief beyond the contest itself.
+
+---
+
+### D26. Nobody at the top removes a peer
+
+**Choice.** Roots never remove roots: a root only replaces itself, and only
+a recovery changes roots otherwise. Owners never remove or downgrade owners:
+an owner leaves, or succeeds the space. Above space owners stand their
+identities, and above identities, their guardians.
+
+**Replaces.** Root-against-root and owner-against-owner removal, judged by
+authorization alone, and space splits (D21).
+
+**Why.** The review showed that peer removal at the top let a removed owner
+backdate a removal and erase years of another owner's work, and let a
+removed root re-contest an identity after recovery. Removing the power
+removes the attacks. A compromised owner is a compromised identity, which
+its guardians fix; a real disagreement between owners is a parting, which
+succession expresses without any rule choosing a winner.
+
+**Cost.** An owner cannot expel a co-owner. They can only leave with the
+members who follow them.
+
+---
+
+### D27. One kind of removal; the remover decides what to keep
+
+**Choice.** `remove_key` has no mode. In identity logs, a removed key's
+entries count only if they are ancestors of its removal, so the removal's
+parents say what is kept. In spaces, a removed key's entries count only if
+witnessed. Whether software witnesses before removing, for a sold device, or
+asks the person, for a stolen one, is a matter of software, not protocol.
+
+**Replaces.** Retired and compromised modes, with different validity rules
+in identity logs and spaces.
+
+**Why.** Retirement that kept concurrent entries let a sold admin laptop add
+keys forever with old parents. A mode the remover chooses gives the protocol
+nothing it can check; a choice of parents does.
+
+**Cost.** A thief's work that the person's other devices built on before
+the theft was noticed is kept. Before anyone noticed, it was trusted.
+
+---
+
+### D28. History is never pruned by protocol
+
+**Choice.** State is defined over full history only. A device may run light
+from its own identity's checkpoint, and fetch history from a full holder
+when needed. History itself is bounded by succeeding a space.
+
+**Replaces.** Barriers and pruning (D22).
+
+**Why.** The review showed that a barrier written by any owner could be
+forged, could change after holders had pruned, and left pruned holders
+unable to evaluate membership. Every fix made the barrier more like a
+successor space, so the design now says so directly: a fresh start is a new
+space, chosen by its owners, and accepted by its members by joining.
+
+**Cost.** Someone must keep full history for a space to survive the loss of
+its full holders. Moving to a successor is visible to members, and late
+changes to the old space must be re-applied by hand.

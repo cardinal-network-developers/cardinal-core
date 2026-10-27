@@ -57,7 +57,8 @@ else.
 ## Post-quantum signatures
 
 When forging Ed25519 becomes plausible, a new suite adds ML-DSA or SLH-DSA
-signatures. Each identity moves with `set_suite`, in an entry signed by the
+signatures. Each identity moves with `set_suite`, a
+[replacement](spec/identity.md#roots) of the root: an entry signed by the
 old root key, carrying a signature by the new root key over the entry's
 other contents, as `add_key` carries a proof of possession. Larger signatures make entries larger, which matters only for
 mailbox envelopes. Those may then carry heads messages instead of entries.
@@ -79,7 +80,10 @@ trusted as its curator. None of this is protocol.
 
 ## Ephemeral conversations
 
-A space policy that rotates the epoch every few messages and deletes old
-keys on every member's devices. It gives disappearing conversations to those
-who want them, without imposing that on everyone. See
+A space policy under which the space is
+[succeeded](spec/spaces.md#succession) every few days, carrying nothing
+forward, and every member's devices delete the old space and its keys. It
+gives disappearing conversations to those who want them, without imposing
+that on everyone. What remains to specify is the policy field and how
+members' software agrees on the schedule. See
 [decisions.md](decisions.md) D4.

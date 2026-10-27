@@ -17,8 +17,7 @@ A set is named by a **label**, 32 bytes, agreed by both sides:
 
 | Set | Label | Who may name it |
 |---|---|---|
-| a space's sealed entries, excluding those pruned behind its latest barrier ([state.md](state.md#barriers)) | the space id | member devices to member devices |
-| a space's full history | `BLAKE3("history" \|\| space id)` | member devices to member devices, on request |
+| a space's sealed entries | the space id | member devices to member devices |
 | an identity log | `BLAKE3("identity log" \|\| identity id)` | everyone listed in [identity.md](identity.md#distribution), and the identity's storage hosts |
 | a stored set at a host | a random label the owner chose when granting storage ([hosts.md](hosts.md#storage)) | the owner's devices and that host |
 | chunks of a space held by a host | likewise | likewise |
@@ -92,7 +91,8 @@ the next message.
 
 After reconciliation, each side requests what it lacks with `want`, at most
 256 ids at a time. The holder replies with `objects`, omitting any it no
-longer holds. The receiver checks every object against its id,
+longer holds, or, as a [light holder](state.md#light-holders), holds only
+by id. The receiver checks every object against its id,
 and against the rules of the layer that owns the set, before storing it.
 
 An object whose prerequisites are missing (a space entry whose parents have

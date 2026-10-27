@@ -68,45 +68,57 @@ authors, structure, or content.
 
 ## Authors
 
-An entry is **attributable** if its signing key is a device or admin key of
-the author, effective at the cited head of the author's identity log.
+**Validity and state are pure functions of the set of entries**, together
+with the identity logs of the space's members. Every member that holds the
+same entries and logs computes the same membership, epochs, and state,
+whatever order things arrived in and whatever its clock says.
 
-Whether it stays valid depends on what has happened to that key since, as
-the verifier knows from the author's log:
+An entry is **attributable** if its signing key is a device or admin key of
+the author, effective at the cited head of the author's identity log, as
+[evaluated](identity.md#evaluating-a-log) from the whole log the verifier
+holds. A key whose adding entry is invalid was never added, and nothing it
+signed is attributable.
+
+Whether an attributable entry stays valid depends on what has happened to
+its key since:
 
 - **still effective**: valid;
-- **removed in any mode**, retired or compromised: valid only if the entry
-  is **witnessed**.
+- **removed**: valid only if the entry is **witnessed**.
 
-Retired keys are treated like compromised ones here, because a sold laptop
-whose key was never wiped could otherwise write as its old owner forever,
-citing an old log head. An entry by key `K` is witnessed if it is an ancestor
-of, or is listed by, a valid entry of the same author that:
+A key may have been sold, broken, or stolen; the space cannot tell which,
+and a sold laptop whose key was never wiped could otherwise write as its old
+owner forever, citing an old log head. An entry by key `K` is witnessed if it
+is an ancestor of, or is listed by, a valid entry of the same author that:
 
-- is signed by another key, and cites a log head that does not contain the
-  removal of `K`; or
+- is signed by another key that is effective at its cited head, and cites a
+  head that does not contain the removal of `K`; or
 - contains a `keep` op for `K` that lists it or one of its descendants.
 
 A device's entries are thus kept if its own identity built on them while it
 still trusted the device, or if the person chose to keep them afterwards.
-The person's other devices are the only witnesses whose word counts: they are
-not the thief. Other members building on an entry does not save it. A
-witness must itself be valid; since a witness is always a descendant of what
-it witnesses, validity can be computed from the newest entries backward.
+The person's other devices are the only witnesses whose word counts. Other
+members building on an entry does not save it. A witness must itself be
+valid; since a witness is always a descendant of what it witnesses, validity
+can be computed from the newest entries backward.
 
-**Witnessing is routine.** Every write by one of a person's devices
-witnesses everything of theirs it has seen. Before writing a removal of a
-key, in either mode, software MUST first sync each space it holds with
-whatever holders it can reach, and append an empty entry, with all current
-heads as parents, in each space where the removed key wrote something not
-yet witnessed. A device that retires itself first has another device of the
-identity, usually the one replacing it, do the same.
+**Witnessing is ordinary.** Every write by one of a person's devices
+witnesses everything of theirs it has seen. That includes, unavoidably,
+anything a thief wrote with a stolen device before the person noticed: until
+then the person's own devices trusted it. Software therefore treats removals
+in two ways, which differ only in what the software does, not in the
+protocol:
 
-**Keeping after the fact.** When no device was left to witness, as after a
-recovery from nothing, software offers to keep a removed device's work up to
-a point the person chooses, and writes a `keep` op listing the last entries
-to keep. Entries the thief wrote after that point are not ancestors of them,
-so they stay invalid.
+- **Retired** (sold, replaced, broken): before writing the removal, software
+  syncs each space it holds with whatever holders it can reach, and appends
+  an empty entry, with all current heads as parents, in each space where the
+  device wrote something not yet witnessed. Nothing honest is lost.
+- **Lost or stolen**: software witnesses nothing. It shows the person the
+  device's unwitnessed entries in each space, and writes a `keep` op for
+  those the person recognizes, up to the point they choose.
+
+Entries a thief wrote after that point are not ancestors of what is kept, so
+they stay invalid. The same `keep` serves a recovery from nothing, when no
+device was left to witness.
 
 Software MUST show the person when entries are discarded for these reasons.
 Validity converges as identity logs spread. Members MAY hold an entry back
@@ -119,16 +131,21 @@ until they have the author's log.
 | reader | 0 | | itself |
 | writer | 1 | | itself |
 | admin | 2 | readers, writers, admins | readers, writers; itself |
-| owner | 3 | anyone | anyone |
+| owner | 3 | anyone | admins, writers, readers; itself |
 
 Readers receive epoch keys and read; the only entries they write are their
 own reach node, `keep` ops, and their own removal. Writers also append
-application ops and rotate epochs. Owners also change policy. The author of the genesis entry is
-an owner.
+application ops and rotate epochs. Owners also change policy and
+[succeed](#succession) the space. The author of the genesis entry is an
+owner.
 
-As in identity logs, **no member can remove another of equal role, except
-owners removing owners**, so every conflict below owner has an arbiter.
-Conflicts between owners [split the space](#splits).
+As in identity logs, **no member can remove or downgrade another of equal
+role**. Owners cannot remove owners. Every conflict has a higher arbiter, and
+above the owners stand their identities: a compromised owner device is
+removed in the owner's identity log, and a compromised owner identity is
+recovered by its guardians. Owners who disagree with each other do not fight
+inside the space; any of them can [succeed](#succession) it with the
+members they choose.
 
 ## Control operations
 
@@ -138,13 +155,14 @@ ones).
 
 | Op | Name | Fields |
 |---|---|---|
-| 1 | `create` | 1: profile (uint or bytes(32)); 2: policy; 3: id of the space this one was [split](#splits) from, if any. Genesis only. |
+| 1 | `create` | 1: profile (uint or bytes(32)); 2: policy; 3: id of the space this one [succeeds](#succession), if any; 4: initial state: [blob reference](blobs.md#references) to a [canonical state](state.md#canonical-state). Genesis only. |
 | 2 | `add_member` | 1: identity id; 2: role |
 | 3 | `set_role` | 1: identity id; 2: role |
 | 4 | `remove_member` | 1: identity id |
 | 5 | `rotate` | 1: list of `{1: epoch id, 2: key}`: the keys of every epoch this one supersedes, only if history is shared |
 | 6 | `set_policy` | 1: policy |
 | 7 | `keep` | 1: signing key of a removed device of the author; 2: list of entry ids by that key ([Authors](#authors)) |
+| 8 | `succeed` | 1: id of the successor space ([Succession](#succession)) |
 
 **Policy** is a record:
 
@@ -160,36 +178,55 @@ Membership follows the rules of [identity logs](identity.md#evaluating-a-log),
 with members in place of keys and roles in place of powers:
 
 - An entry is **valid** if it is attributable, authorized by the membership
-  state built from its valid ancestors, and every removal or downgrade of
-  its author by a strictly higher role is a descendant of it.
+  state built from its valid ancestors, and an ancestor of every valid
+  removal or downgrade of its author by another member.
 - A member leaving (removing itself) is a retirement: its earlier and
   concurrent entries stay.
-- An entry by which an owner removes or downgrades another owner is judged
-  by authorization alone. Any other entry by an owner is invalid if it is
-  concurrent with a valid entry by another owner that removes or downgrades
-  its author. A removed owner therefore cannot keep writing with old parents.
 
-### Splits
+Because only a strictly higher role can remove or downgrade a member, these
+rules never loop, and backdating gains nothing at any role.
 
-A space is **split** when two concurrent valid entries, by different owners,
-each remove or downgrade the other's author. Both entries stay valid, so
-both owners lose their role in the original space. No rule could choose
-between them: two owners who disagree about who belongs are a real
-disagreement, and the protocol does not pretend to settle it.
+## Succession
 
-When a member's device sees a split:
+A space can be **succeeded** by a new one. Succession is how a space starts
+fresh, how a history is bounded, and how owners part ways.
 
-- software shows the original space read-only, with its state computed by
-  the rules above, and writes nothing more to it;
-- software of each owner in the split offers to create a **copy**: a new
-  space whose genesis has `create` field 3 naming the original, holds as
-  `create` ops the state computed as if only that owner's removal were
-  valid, and adds the members that owner chooses;
-- other members are offered each copy as an ordinary membership, and choose
-  which to accept, or both.
+An owner writes `succeed`, naming a successor space it has created. The
+successor's genesis has `create` field 3 naming the old space and field 4
+holding the old space's state, computed from the `succeed` entry's causal
+past, as its initial state. Node ids carry over, so references into the old
+state still resolve. The successor's members, roles, and policy are whatever
+its genesis says. Its history starts at genesis; the old space's history
+stays where it is, for those who keep it.
 
-A friendship in which one side was compromised should split, not be decided
-by a rule. Each person keeps the history they shared.
+A `succeed` is the owner leaving the old space, with a forwarding address:
+
+- If owners remain, the old space continues among its remaining members.
+  Members of the old space are offered the successor if its genesis added
+  them, and may belong to both.
+- When the last owner leaves by `succeed`, the old space is **closed**: an
+  entry is invalid if the membership state built from its causal past has
+  no owners, and the last owners in it left by `succeed`. Entries
+  concurrent with a `succeed`, written by members who had not seen it, stay
+  valid in the old space. Software shows them in the successor as changes to
+  re-apply, like any conflict, and never applies them silently.
+
+So:
+
+- **Start fresh, or bound history.** The sole owner of a files space, or
+  every owner of a group, succeeds the space. New devices start from the
+  successor's genesis. The old space can be archived to a host or dropped.
+- **Ephemeral conversations.** A conversation policy that succeeds the space
+  every few days, carrying no state forward, and deletes the old keys,
+  gives disappearing messages ([later.md](../later.md#ephemeral-conversations)).
+- **Owners who disagree.** One owner of a relationship space, or of a group,
+  succeeds it with the members they choose. The others keep the old space.
+  A friendship in which one side was compromised ends this way, or by the
+  compromised side's recovery; it is not decided by a rule.
+
+Both owners of a relationship space succeed it together for a fresh start:
+one proposes a successor, and the other accepts it by writing its own
+`succeed` naming the same successor.
 
 ## Epochs
 

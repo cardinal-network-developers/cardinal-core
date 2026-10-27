@@ -50,14 +50,21 @@ Key, certificate, scope, epoch, entry, blob, chunk, hash, session, host
   merges. Nothing is lost and nothing is chosen silently.
 - **Lost phone.** On the laptop or home computer: "This phone is lost."
   Everything it wrote that your other devices had already seen is kept. The
-  phone is cut off from everything, and contacts' devices learn it the next
-  time they connect.
+  software shows anything else it wrote, and you keep what you recognize.
+  The phone is cut off from everything, and contacts' devices learn it the
+  next time they connect.
+- **Sold or replaced a device.** "I'm done with this laptop." Everything it
+  did is kept, and nothing it does later counts.
 - **Lost everything.** On a new device: enter the 24 words and the
-  always-on device's address. Or ask three of your guardians to approve.
-  After the waiting period, everything returns.
+  always-on device's address. Or ask three of your guardians to approve:
+  each reads a short code off your new device. After the waiting period,
+  everything returns.
 - **Someone has my words.** The software notices the conflicting change,
   says so plainly, and walks the person through asking guardians to settle
   it.
+- **Starting fresh.** A space whose history has grown too long, or a
+  friendship that has gone wrong, is succeeded by a new space. What should
+  carry over does; the old one can be archived or dropped.
 - **Running out of copies.** "Your photos are only on this laptop" is a
   warning the software can give, because the account space knows where
   every copy is. Fixing it is one button: add a friend's always-on device,
