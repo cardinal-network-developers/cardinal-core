@@ -119,6 +119,14 @@ Chunks and indexes are fetched by id from any holder, through the
 MUST verify that `BLAKE3(ciphertext) == id` before using or storing a chunk.
 Verification needs no key, so a chunk may come from anywhere.
 
+Which device to ask, and in what order, is each fetcher's own choice. A
+device fetching in the background SHOULD order its requests differently
+from other devices, for example by a hash keyed with its own device key.
+Devices fetching the same content then get different parts first and can
+serve each other, so a device on a slow link sends each part about once
+rather than once per fetcher. Reads a person is waiting for go in order and
+first.
+
 ## Retention
 
 A device decides locally which chunks to keep. Typical policies, set per
