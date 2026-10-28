@@ -104,6 +104,51 @@ that on everyone. What remains to specify is the policy field and how
 members' software agrees on the schedule. See
 [decisions.md](decisions.md) D4.
 
+## Redundancy targets and archives
+
+**Goal.** A space states how well its data should be kept, such as "three
+copies in two places, one away from home", and software reports how well
+that is met. An organization keeps an off-site archive that never deletes.
+
+**Fit.** Copies are already counted by what was seen
+([blobs.md](spec/blobs.md#counting-copies)); this adds a target to measure
+against. Everything here is guidance to devices and changes no validity
+rule.
+
+- **Targets in observed terms.** New [space policy](spec/spaces.md) fields:
+  minimum copies seen, minimum distinct places, longest time between
+  checks, and how long to keep chunks of old versions (all, a period, or a
+  thinning schedule of hourly, then daily, then monthly).
+- **Places are labels, not measurements.** No protocol can tell whether two
+  holders share a disk or a flood plain. The person who arranges the
+  holders labels them ("home", "Mom's house", "paid host"), and targets
+  count distinct labels. The assumption is stated where it can be seen and
+  corrected.
+- **Reports are history, not forecasts.** "Two or more copies 99.6% of the
+  last 30 days; one copy for 3 hours on Oct 12 while the NAS rebuilt."
+  Time without a working copy depends on how fast failures are noticed (the
+  check interval) and how fast copies are rebuilt, and both are measured.
+- **A probability of loss**, if shown at all, is an application's what-if:
+  published failure rates per kind of device and per place, updated by the
+  person's own history (which barely moves them: never having had a disk
+  fail says little), combined with measured detection and repair times. Its
+  absolute numbers are fragile; its comparisons ("an off-site copy cuts the
+  estimate a hundredfold") are not. It is never a promise.
+- **Blind archive.** A host that holds a space's entries and chunks without
+  its keys, never deletes, and verifies everything by hash. It cannot read
+  what it keeps; restoring goes through a member. The entry history is
+  already a complete record, so the archive is git-like for free. An
+  archive that can read, for compliance, is a member, and members should
+  see that it exists.
+- **Deletion is a promise.** Any member can keep a copy, so a short
+  retention target is cooperative, as [ephemeral conversations](#ephemeral-conversations)
+  are. A space that archives forever should say so to members before they
+  write.
+
+What remains to specify: the policy fields, the place labels, and whether
+holders of a shared space make themselves known to all members or only to
+its owners, since a list of holders is a list of machines to seize.
+
 ## Starting over
 
 Some losses are beyond recovery: the words are gone, no device survives,

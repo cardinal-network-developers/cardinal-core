@@ -128,6 +128,33 @@ space in the account space ([profiles.md](profiles.md#account)):
 - **on demand**: keep what was opened recently, up to a size budget;
 - **history**: also keep chunks referenced only by older versions.
 
-The account space records which devices and hosts hold full copies of each
-space, so the software can tell a person how many copies of their files
-exist, and warn when the answer is one.
+### Counting copies
+
+The account space records which devices and hosts are meant to hold full
+copies of each space: placements and host grants. That is intent, not
+evidence. A device counting copies, to tell a person how many exist and to
+warn when the answer is one, SHOULD count only holders it has seen serve
+the content recently:
+
+- **Checks.** To check a holder, a device requests a few chunks chosen at
+  random from those the holder should keep, through the ordinary `blob`
+  service. The checker needs only their ids, from state, and verifies the
+  answers by hash. A check is an ordinary request, so a holder cannot keep
+  only what is checked. A holder that does not answer, or answers wrongly,
+  stops counting.
+- **Fetching resets the count.** A holder that fetches a chunk of a space
+  from the counting device stops counting for that space until it passes
+  checks again, after a wait longer than the interval between checks. A
+  rebuild after a failed disk is therefore ordinary sync: the holder drops
+  out of the count while it fetches and comes back when it holds the data.
+  Nothing is declared.
+- **Repeated fetches.** An honest rebuild fetches each chunk once. A holder
+  that fetches the same chunks again and again is not keeping them, and
+  software stops counting it and says so.
+
+Checks catch the common failures: dead disks, silent corruption, lapsed
+grants, wrong settings. They cannot catch a holder that relays chunks from
+a third party, or two holders sharing one disk. Deceit by a holder is a
+matter between people: software shows what it saw, and the person decides
+whom to trust. Reports say what was seen ("2 copies, both checked today"),
+never that data is safe.

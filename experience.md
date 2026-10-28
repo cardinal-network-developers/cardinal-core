@@ -81,9 +81,9 @@ Key, certificate, scope, epoch, entry, blob, chunk, hash, session, host
   friendship that has gone wrong, is succeeded by a new space. What should
   carry over does; the old one can be archived or dropped.
 - **Running out of copies.** "Your photos are only on this laptop" is a
-  warning the software can give, because the account space knows where
-  every copy is. Fixing it is one button: add a friend's always-on device,
-  or your own.
+  warning the software can give, because the person's devices check where
+  the copies are ([blobs.md](spec/blobs.md#counting-copies)). Fixing it is
+  one button: add a friend's always-on device, or your own.
 
 ## Trust is visible
 

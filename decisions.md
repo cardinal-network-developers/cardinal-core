@@ -948,3 +948,28 @@ identity matters.
 **Cost.** Confirmations must be delivered with the guarded identity's log,
 since verifiers no longer know which guardians' logs to fetch. The number of
 guardians and the threshold stay visible.
+
+---
+
+### D45. Copies are counted by what was seen, not by what was claimed
+
+**Choice.** Software counts a holder as a copy only after random chunk
+checks through the ordinary `blob` service. A holder that fetches a chunk
+stops counting until it passes checks again, so a rebuild after a disk
+failure needs no declaration. Holders that fetch the same chunks
+repeatedly stop counting. Redundancy targets, place labels, and archives
+are left to [later.md](later.md#redundancy-targets-and-archives).
+
+**Replaces.** The account space's record of which devices and hosts hold
+copies, taken as the count.
+
+**Why.** "N copies, survives N-1 failures" assumes the copies are real and
+fail independently, and neither can be verified without owning the
+hardware. A count of copies seen recently is something software can
+measure and state honestly. Checks look like ordinary requests, so a
+holder cannot keep only what is checked, and counting by observation makes
+an honest rebuild and a missing copy the same thing: not held right now.
+
+**Cost.** A holder that relays chunks from a third party, or two holders on
+one disk, still pass. Catching deliberate deceit is left to the people
+involved. Checks cost a little bandwidth.
