@@ -5,9 +5,10 @@ their identity, their data, and their relationships. Nothing reaches a
 person without their consent, and nobody's permission is needed to take
 part.
 
-Status: **first complete draft.** It is coherent end to end and has not been
-implemented. The cryptographic constructions need review by a cryptographer
-before anything is frozen.
+Status: **first complete draft.** It is coherent end to end. An experimental
+implementation, [Cardinal Node](https://github.com/cardinal-network-developers/cardinal-node),
+is being used to settle it. The cryptographic constructions need review by a
+cryptographer before anything is frozen.
 
 ## Reading order
 
@@ -66,3 +67,11 @@ recovered, if its phrase is stolen; the first build should say so.
 This replaces the drafts in `../tools`. It keeps their principles and several
 of their mechanisms, and departs from them in the places listed in
 [decisions.md](decisions.md).
+
+## License
+
+The specification text is licensed under
+[Creative Commons Attribution 4.0](LICENSE) (CC BY 4.0). Code in this
+repository, such as `model/`, is licensed under either of
+[Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT),
+at your option. See [CONTRIBUTING.md](CONTRIBUTING.md).
