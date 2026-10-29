@@ -973,3 +973,34 @@ an honest rebuild and a missing copy the same thing: not held right now.
 **Cost.** A holder that relays chunks from a third party, or two holders on
 one disk, still pass. Catching deliberate deceit is left to the people
 involved. Checks cost a little bandwidth.
+
+Amended by D46: fetching no longer stops a holder counting, and counting
+copies is guidance, not a requirement.
+
+---
+
+### D46. Only a missing chunk fails a holder
+
+**Choice.** Counting copies is guidance: each device chooses how far to
+look, from trusting the account space's record, to spot checks, to looking
+for anomalies such as answers slower than the holder's round trip. Spot
+checks are the reasonable default. A holder fails only by not producing a
+chunk it should keep, or producing a wrong one. Fetching, once or
+repeatedly, is never held against it.
+
+**Replaces.** D45's rules that a holder that fetches stops counting until
+it passes checks after a wait, and that one fetching the same chunks
+repeatedly stops counting.
+
+**Why.** A check is an ordinary request, so a device cannot tell another
+holder's check of it from a fetch: two holders checking each other would
+reset each other forever. Working around that took allowances by volume,
+waits, and rechecks during checks, and none of them caught a holder set on
+cheating. What matters is whether the chunk is there, and a check sees
+that directly: a rebuilding holder fails while chunks are missing and
+passes once it has them, still with nothing declared. Catching deceit pays
+off only once holders cannot be trusted. Until then, checks find accidents
+and show the state of the data from tests rather than assumptions.
+
+**Cost.** A holder that keeps nothing and fetches each checked chunk from
+elsewhere as it is asked passes. It passed under D45 too, by relaying.

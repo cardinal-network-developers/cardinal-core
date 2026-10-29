@@ -138,31 +138,37 @@ space in the account space ([profiles.md](profiles.md#account)):
 
 ### Counting copies
 
+This section is guidance, not a requirement. It describes what a device
+can learn about other holders through the ordinary protocol; how far to
+look is each device's choice.
+
 The account space records which devices and hosts are meant to hold full
 copies of each space: placements and host grants. That is intent, not
 evidence. A device counting copies, to tell a person how many exist and to
-warn when the answer is one, SHOULD count only holders it has seen serve
-the content recently:
+warn when the answer is one, can:
 
-- **Checks.** To check a holder, a device requests a few chunks chosen at
-  random from those the holder should keep, through the ordinary `blob`
-  service. The checker needs only their ids, from state, and verifies the
-  answers by hash. A check is an ordinary request, so a holder cannot keep
-  only what is checked. A holder that does not answer, or answers wrongly,
-  stops counting.
-- **Fetching resets the count.** A holder that fetches a chunk of a space
-  from the counting device stops counting for that space until it passes
-  checks again, after a wait longer than the interval between checks. A
-  rebuild after a failed disk is therefore ordinary sync: the holder drops
-  out of the count while it fetches and comes back when it holds the data.
-  Nothing is declared.
-- **Repeated fetches.** An honest rebuild fetches each chunk once. A holder
-  that fetches the same chunks again and again is not keeping them, and
-  software stops counting it and says so.
+1. **Trust the record**: count every holder meant to keep the space.
+2. **Spot-check**: request a few chunks chosen at random from those a
+   holder should keep, through the ordinary `blob` service, and verify the
+   answers by hash. The checker needs only their ids, from state. A check
+   is an ordinary request, so a holder cannot tell it from a fetch and
+   keep only what is checked. A holder fails only by not producing a
+   chunk it should keep, or producing a wrong one; it counts again once
+   it passes. A holder that does not answer at all may be busy or on a
+   poor link, and is better asked again than failed at once.
+3. **Look for anomalies**, such as chunks a holder agreed to keep coming
+   back far slower than its round trip or its own data, which suggests it
+   fetches them from elsewhere to answer. This pays off only once holders
+   cannot be trusted.
 
-Checks catch the common failures: dead disks, silent corruption, lapsed
-grants, wrong settings. They cannot catch a holder that relays chunks from
-a third party, or two holders sharing one disk. Deceit by a holder is a
-matter between people: software shows what it saw, and the person decides
-whom to trust. Reports say what was seen ("2 copies, both checked today"),
-never that data is safe.
+Spot checks are the reasonable default. Requesting chunks is never a
+failure: every device fetches, a check looks like a fetch, and a holder
+rebuilding after a failed disk simply fails checks while chunks are
+missing and passes once it has them again. Nothing is declared.
+
+Spot checks catch the common failures: dead disks, silent corruption,
+lapsed grants, wrong settings. They trust whatever answer comes back, so a
+holder that relays chunks from a third party, or two holders sharing one
+disk, pass. Deceit by a holder is a matter between people: software shows
+what it saw, and the person decides whom to trust. Reports say what was
+seen ("2 copies, both checked today"), never that data is safe.
