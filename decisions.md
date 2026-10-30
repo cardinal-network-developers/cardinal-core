@@ -1004,3 +1004,23 @@ and show the state of the data from tests rather than assumptions.
 
 **Cost.** A holder that keeps nothing and fetches each checked chunk from
 elsewhere as it is asked passes. It passed under D45 too, by relaying.
+
+---
+
+### D47. Paths kept on one device are listed in a file
+
+**Choice.** A `.cardinalignore` file in a folder lists, in gitignore
+syntax, paths that each device keeps to itself and never writes to the
+space ([profiles.md](spec/profiles.md#paths-kept-on-one-device)).
+
+**Replaces.** The files profile's folder field 1, a list of glob patterns
+stored on the folder node, which no implementation used.
+
+**Why.** A file is easier to reason about: it is seen and edited with any
+editor, it comes along when a folder is copied in, and its syntax is one
+people already know. Patterns in a node field are invisible, need a
+command to see or change, and would have needed a syntax of their own.
+
+**Cost.** The sync engine reads a file's content to decide what to sync.
+Files under 1 KiB are stored inline in entries, so every device holding
+the state has them; a larger one is read once its chunks are here.

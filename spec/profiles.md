@@ -70,9 +70,22 @@ A files space mirrors a folder tree.
 
 | Kind | Name | Fields |
 |---|---|---|
-| 1 | folder | 1: ignore patterns (list of text, glob syntax) |
+| 1 | folder | (none) |
 | 2 | file | 1: content: blob reference, or bytes for content under 1 KiB; 2: mode bits; 3: modified time (author's clock, display only) |
 | 3 | link | 1: target (text) |
+
+### Paths kept on one device
+
+A file named `.cardinalignore` in a folder lists, in gitignore syntax,
+paths in that folder and below that a device SHOULD keep to itself: it
+shows them where it presents the space, but does not write them to the
+space. As in git, the nearest file with a matching line decides, and a `!`
+line brings a path back. These are ordinary files of the space, so every
+device keeps the same paths to itself.
+
+A line keeps new paths out; it removes nothing the space already holds.
+Moving a file to a path a line names removes it from the space, and
+moving one out adds it.
 
 ### Mapping to a disk (guidance)
 
