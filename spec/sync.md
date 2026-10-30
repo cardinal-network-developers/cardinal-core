@@ -55,7 +55,10 @@ Messages on the `sync` service are records whose key 0 is an op:
 | 1 | reconcile: `{0: 1, 1: label, 2: ranges}` |
 | 2 | want: `{0: 2, 1: label, 2: ids}` |
 | 3 | objects: `{0: 3, 1: label, 2: list of object bytes}` |
-| 4 | heads: `{0: 4, 1: space id, 2: sealed ids}` |
+| 4 | heads: `{0: 4, 1: label, 2: ids}` |
+
+A device ignores a message whose op it does not know, so later versions can
+add ops without breaking older devices.
 
 In a reconcile message, `ranges` is a
 list of records, ascending, together covering all possible ids:
@@ -99,7 +102,9 @@ An object whose prerequisites are missing (a space entry whose parents have
 not arrived, an identity entry whose parents have not arrived) is held, and
 the receiver reconciles that set with the sender. Parents are named by entry
 id, which a host cannot see, so missing parents are found by reconciling,
-not by `want`.
+not by `want`. While it holds such an object, a device reconciles again with
+the sender of any [notice](#notices) for that set, even one naming nothing
+it lacks, because that sender may have the parents by now.
 
 A storage host accepts `objects` for a label only from the owner's devices.
 That is how an owner puts objects into storage
@@ -131,18 +136,79 @@ A device MAY refuse requests that exceed its own rate limits.
 
 - **On session open**, devices reconcile every set both are entitled to,
   starting with identity logs, so revocations travel first.
-- **On write**, a device sends the new sealed entry to every online device
-  of every member, as an `objects` message, if it fits in 900 bytes.
-  Otherwise it sends a `heads` message. Recipients fetch what they lack.
-- **Offline recipients** get the same entry or heads message in their
-  mailbox ([hosts.md](hosts.md#mailbox)). A mailbox carries notice of a
-  change, never bulk data.
+- **On news**, a device that writes to a set, or stores objects new to it,
+  sends [notices](#notices).
 - **Periodically**, on long-lived sessions, every few minutes, at background
   priority.
 
-All sync traffic is **background** priority on the link
+Reconciling and fetching are **background** priority on the link
 ([link.md](link.md#priority)), except blob fetches that a person is waiting
-for, such as opening a file, which are **interactive**.
+for, such as opening a file, which are **interactive**. Notices are
+interactive too, so that news does not wait behind a large sync.
+
+## Notices
+
+A **notice** tells a peer that a set has changed. It is an `objects` message
+carrying the new objects, if it fits in 900 bytes, or otherwise a `heads`
+message naming the latest objects the sender holds. A recipient fetches what
+it lacks from the sender with `want`.
+
+Notices make sync fast, not correct. Reconciling is what makes two sets
+equal, so a notice may be lost, and the sets still converge.
+
+### Passing news on
+
+Every device passes news on the same way, whether it wrote the objects or
+received them, so reaching everyone online is not the writer's job. Storage
+hosts do not pass news on: they hold what owners give them.
+
+- **When.** A device sends a notice when it writes to a set, and when it
+  stores objects that were new to it, however they arrived. Objects it
+  already holds are not news, and it does not pass them on. That alone ends
+  a notice's travel: there is no hop count, and no message id to remember.
+- **What.** Only objects it has checked and whose parents it holds, so that
+  it can serve what it announces, and nothing false travels past the first
+  honest device. When parents arrive and release objects held for them, the
+  notice is a `heads` message, which covers them all. A
+  [light holder](state.md#light-holders) does not announce what it holds
+  only by id.
+- **To whom.** Peers it has sessions with that are entitled to the set, not
+  including one that told it all of the news the notice covers. A device
+  with few such peers SHOULD tell them all. One with more SHOULD tell a
+  random selection, of at least three, and about eight is a good default.
+  The choice is local.
+- **How soon.** At once for an identity log, so revocations travel first.
+  For anything else a device MAY wait a moment, so that one notice covers a
+  burst. A `heads` message covers everything before the objects it names,
+  because a recipient that lacks their parents reconciles
+  ([Fetching objects](#fetching-objects)). For the same reason, a later
+  notice repairs one that was lost.
+
+### Neighbours
+
+A device does not need a session with every holder of a set. It SHOULD keep
+sessions with its own devices and, in a space with many members, with about
+six other member devices, chosen at random and replaced from time to time.
+Random choice is what holds a space together: with sessions like these, news
+reaches nearly every device in a few hops, even when a fifth of them are
+silent ([D48](../decisions.md#d48-every-device-carries-the-news)).
+
+### Members who are offline
+
+Notices for a member with no device online go to that member's mailbox
+([hosts.md](hosts.md#mailbox)). A mailbox carries notice of a change, never
+bulk data. A device believes a member offline if it has no session with any
+of the member's devices and has heard nothing from them lately.
+
+A writer SHOULD deposit each write for each member it believes offline, as
+long as those are few, about eight. Two people who are rarely online together
+can then still talk.
+
+Beyond that, a member needs only one waiting notice, because one `heads`
+message covers everything before it, and because a returning device
+reconciles with whoever it reaches. A writer SHOULD deposit for about eight
+of those members, chosen at random, and need not deposit again for a member
+until it has heard from that member.
 
 ## Sneakernet and delay-tolerant carriage
 

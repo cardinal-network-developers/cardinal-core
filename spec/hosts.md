@@ -75,8 +75,9 @@ members who may have been removed. Each member rotates its own:
 
 1. On seeing a new epoch, the member's device registers a fresh token and
    writes its reach node with it, in the new epoch.
-2. It deposits that reach node, through each other member's current token,
-   in their mailboxes, so members who were offline learn it.
+2. That reach node is a write like any other. It reaches the other members
+   through [notices](sync.md#notices), in their mailboxes if they are
+   offline, using their current tokens.
 3. It keeps the old token active until every remaining member has written
    an entry that descends from the new reach node, or until the grant's
    retention period has passed, and then revokes it. A token is revoked at
@@ -113,7 +114,7 @@ The plaintext is an **envelope payload**:
 | Key | Field |
 |---|---|
 | 0 | kind = 7 |
-| 1 | a sealed entry, or a heads message ([sync.md](sync.md#when-to-sync)) |
+| 1 | a sealed entry, or a heads message ([sync.md](sync.md#notices)) |
 
 ### Operations
 

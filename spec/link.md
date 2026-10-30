@@ -292,7 +292,7 @@ Every stream and channel has a priority class:
 | Class | Value | Used for | Behavior |
 |---|---|---|---|
 | real-time | 0 | calls, games | sent first; never queued behind other classes |
-| interactive | 1 | a person waiting: opening a file, sending a message | next |
+| interactive | 1 | a person waiting: opening a file, sending a message; [notices](sync.md#notices) | next |
 | background | 2 | sync, backup, prefetch | uses only spare capacity |
 
 Congestion control is REQUIRED. Implementations MUST pace packets and MUST

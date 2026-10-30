@@ -1024,3 +1024,64 @@ command to see or change, and would have needed a syntax of their own.
 **Cost.** The sync engine reads a file's content to decide what to sync.
 Files under 1 KiB are stored inline in entries, so every device holding
 the state has them; a larger one is read once its chunks are here.
+
+---
+
+### D48. Every device carries the news
+
+**Choice.** A device that writes to a set, or stores objects new to it, tells
+a few peers entitled to the set, and they do the same
+([sync.md](spec/sync.md#notices)). Which peers and how many is each device's
+own choice. In a large space a device keeps sessions with its own devices and
+about six others, chosen at random. A writer deposits in the mailboxes of at
+most about eight offline members per write, and not again for a member until
+it has heard from them. `heads` works for any set, and devices ignore `sync`
+ops they do not know.
+
+**Replaces.** The rule that a writer sends each entry to every online device
+of every member, and to the mailbox of every offline one; the rule that all
+sync traffic is background; and the step of token rotation in which each
+member deposits its reach node with each other member.
+
+**Why.** Fan-out from the writer costs the writer in proportion to the space,
+and fails when the writer cannot reach someone that others can. Passing news
+on costs each device the same small amount, and gives every device several
+paths. Sets already say what is new, so a notice stops by itself, with no hop
+count or message ids. Reconciling already guarantees convergence, so notices
+only have to be fast, not reliable, and one `heads` message covers everything
+before it, so a later notice repairs a lost one. All of this adds no message
+type: `heads`, `want` and `objects` were there.
+
+Simulated with 600 devices (200 members with 3 each), each opening 6 sessions
+and telling up to 8 peers: a notice reaches 100% of them in about 6 hops, and
+99.99% of live devices when a fifth are silent, for about 6 notices per
+device. With 3 sessions each, the worst run reached only 0.2%, when a writer's
+neighbours were all silent, so "a few" means about six. A writer that had
+sent 600 messages sends 8.
+
+A device does not announce an object before its parents, and while it holds
+an object for missing parents, any notice for that set sends it back to
+reconcile. Without these, a device that reconciled too early, with a peer
+still fetching the parents, ignored the next notice, because it named an object
+already held, and waited minutes for the periodic reconcile. The stress test
+showed this happening before there was any forwarding.
+
+A rule that every device deposits for a few offline members would have been
+worse than the old one: 150 online devices each making 8 deposits is 1,200 per
+write. Someone offline is in no hurry, and needs only one waiting notice, so
+only the writer deposits, and only until it has heard from them.
+
+**Cost.** A device hears most news several times, which is the price of not
+coordinating, though each copy is tiny. News takes several hops instead of
+one, so a space of many members is a little slower to reach everyone than a
+direct send to a device that was reachable. A member of a large space who
+returns when nobody else is online sees only that something changed, until
+someone is. Notices are interactive, so a peer could misuse that class, but
+only on its own session.
+
+**Left open.** Live streams ([later.md](later.md#live-streams)) need their
+own sequence, a way to find peers without a member list, and agreements with
+deadlines. Nothing here stands in their way: the duty to pass news on is
+stated for any set, fan-out and peer choice are local, no field ties a notice
+to a space or a member list, and a new notice op is ignored by older devices.
+

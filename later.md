@@ -54,6 +54,33 @@ cost and fits in an entry.
 It would change how epoch keys are distributed inside a space, and nothing
 else.
 
+## Live streams
+
+A live event can draw an audience far larger than a space, most of it
+strangers, and more than the streamer could serve alone. Peers should absorb
+what the streamer cannot, the way [notices](spec/sync.md#notices) already
+spread news: each one who has a segment tells a few others, who fetch it from
+whoever told them first, so capacity grows with the audience and nobody asks
+the streamer for a route.
+
+Three things would be new, and each adds to what exists:
+
+- **A stream is not a space.** Space entries are history that every member
+  evaluates, and a segment each second is 86,400 a day. A stream would be
+  its own single-writer signed sequence, with a space holding a pointer to
+  it. Its notice says "I hold up to N": a new `sync` op, which older devices
+  ignore.
+- **Finding peers.** A space's members are known from its state, so a device
+  can pick neighbours at random. An audience is not listed anywhere, and
+  should not be. Peers would learn of each other from each other, starting
+  from any one of them, so nobody holds the whole list, including the
+  streamer.
+- **Agreements with deadlines.** Moving data for someone can be modeled on
+  keeping it, with the same [checks](spec/blobs.md#counting-copies): a chunk
+  verifies itself, so the question is only whether it came. A segment that
+  arrives late is worthless, so a transfer agreement adds a deadline, and a
+  late segment is dropped, not retried.
+
 ## Post-quantum signatures
 
 When forging Ed25519 becomes plausible, a new suite adds ML-DSA or SLH-DSA
