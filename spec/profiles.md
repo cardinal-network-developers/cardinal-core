@@ -103,7 +103,8 @@ moving one out adds it.
   the main file, writes a `set` that descends from all versions and settles
   the conflict.
 - Two nodes with the same name in one folder appear as `name` and
-  `name (2)`.
+  `name (2)`. The number belongs to the view: a device that creates such a
+  node again, as when it keeps a folder deleted elsewhere, writes `name`.
 - A delete conflict leaves the file in place and tells the person who deleted
   it and who was still editing it.
 - Every earlier version of every file is in the history. Restoring one is a
