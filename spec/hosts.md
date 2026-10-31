@@ -155,8 +155,9 @@ other's address at the same moment. A host does that.
 | Op | Request | Reply | Who |
 |---|---|---|---|
 | 1 | present: `{0: 1, 1: local addresses}` | `{0: 1}` | owner device, while awake |
-| 2 | connect: `{0: 2, 1: token}` or `{0: 2, 2: device signing key}` | `{0: 2, 1: list of {1: static X25519 key, 2: observed address}}` | token holder, or owner device |
-| 3 | incoming: `{0: 3, 1: static X25519 key, 2: observed address, 3: token or absent}` | (none) | sent by the host to owner devices |
+| 2 | connect: `{0: 2, 1: token}` or `{0: 2, 2: device signing key}` | `{0: 2, 1: list of {1: static X25519 key, 2: observed address, 4: local addresses}}` | token holder, or owner device |
+| 3 | incoming: `{0: 3, 1: static X25519 key, 2: observed address, 3: token or absent, 4: local addresses}` | (none) | sent by the host to owner devices |
+| 4 | addresses: `{0: 4, 1: list of {1: device signing key, 2: list of endpoints}}` | (none) | between a person's own devices |
 
 - On `connect`, the host sends `incoming` to each present owner device, with
   the requester's static key and the address **the host observed**. Owner
@@ -169,7 +170,11 @@ other's address at the same moment. A host does that.
   router and already share a network.
 - Both sides then send initiations to the addresses they were given. The
   first session to complete wins. If none completes within three seconds,
-  the requester relays.
+  the requester relays. When two devices are looking for each other, each is
+  a requester, and the one with the smaller static key relays.
+- An observed address is present only if it is one a packet could be sent
+  back to: a session over TCP has none, since its port says nothing about the
+  device's UDP socket.
 
 Because the host forwards only addresses it observed, a requester cannot aim
 an owner's device at a third party.
@@ -178,7 +183,7 @@ an owner's device at a third party.
 
 | Op | Request | Reply | Who |
 |---|---|---|---|
-| 1 | relay: `{0: 1, 1: token}` or `{0: 1, 2: device signing key}` | `{0: 1, 1: channel (u32)}` | token holder, or owner device |
+| 1 | relay: `{0: 1, 1: token}` or `{0: 1, 2: signing key of the device to reach}` | `{0: 1, 1: channel (u32)}` | token holder, or owner device |
 | 2 | relayed: `{0: 2, 1: channel, 2: static X25519 key of the peer}` | (none) | sent by the host to the owner device |
 
 Once a channel is assigned, each side sends **relayed packets** (link type 5)
@@ -189,6 +194,38 @@ two devices run an ordinary end-to-end session through it, which the host
 cannot read. A relay is just another path for the session
 ([link.md](link.md#paths-and-roaming)), abandoned as soon as a direct path
 validates. Relay bytes count against the token's class.
+
+## Help from a person's own devices
+
+Introducing two devices and passing packets between them take nothing a host
+alone has. Any device with a session to two others sees where each one is. So
+a person's devices offer each other [rendezvous](#rendezvous) and
+[relay](#relay) with no grant, whether or not any of them is a host, and
+whether or not any of them can receive a connection. A host is what makes
+these work with nobody else around; the rest of the time devices can do
+without one.
+
+- Each device presents itself to all of its own devices it has a session with,
+  and serves `rendezvous` for them.
+- A device that cannot reach one of its own asks whichever of them it can.
+- Each device serves `relay` for them too, but relaying costs a helper its own
+  bandwidth, so a device on battery or on a metered connection SHOULD refuse.
+  Rendezvous is a few short messages, and costs almost nothing.
+- Help goes one hop. A device passes on only addresses it observed itself or
+  that its own device reported, and does not relay over a relayed session, so
+  nobody can aim a device at a third party through a chain of helpers.
+- Devices tell each other, in `addresses`, where they have reached their own
+  devices, so that a device coming back has more places to try. What a device
+  found out for itself comes first.
+
+A person's devices can tell each other what they missed when they meet, so a
+device coming back from being offline needs only one of them, not a host and
+not a mailbox ([sync.md](sync.md#when-to-sync)).
+
+This cannot replace hosts altogether. A device with no session at all must
+reach something that can receive a connection, and a person's devices behind
+NATs cannot. That is what a host, or a device with a forwarded port, is still
+for.
 
 ## Storage
 
@@ -260,8 +297,9 @@ key it rebuilt from the shares in the guardians' confirmations.
 ## Staying reachable
 
 - A device that can receive connections needs no host for itself.
-- A device that cannot keeps a session with at least one host while it is
-  awake, presents itself for rendezvous, and polls its mailbox when it wakes.
+- A device that cannot keeps a session with at least one host, or with one of
+  its [own devices](#help-from-a-persons-own-devices), while it is awake,
+  presents itself for rendezvous, and polls its mailbox when it wakes.
 - Phones MAY use the platform's push service to be woken. The push service
   learns only that a device should wake. This is an application choice, not
   a protocol dependency.

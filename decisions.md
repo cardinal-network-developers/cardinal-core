@@ -1085,3 +1085,41 @@ deadlines. Nothing here stands in their way: the duty to pass news on is
 stated for any set, fan-out and peer choice are local, no field ties a notice
 to a space or a member list, and a new notice op is ignored by older devices.
 
+---
+
+### D49. A person's devices help each other
+
+**Choice.** Each of a person's devices offers `rendezvous` and `relay` to the
+others, with no grant, whether or not it is a host or can receive connections.
+They also tell each other where they have reached their own devices. Help goes
+one hop, and a device on battery or a metered connection should not relay.
+
+**Replaces.** The rule that only a host, under a grant, introduces devices and
+relays for them. D11 stands: a host is still one role with several services.
+
+**Why.** Neither service takes anything a host alone has. A session already
+shows a device where its peer is, as `link.md` says of STUN: every peer does
+that. So the network no longer stops helping itself when a host is lost. Hosts
+are few, and a target; the devices of a person are many, and their addresses
+are in no list. This keeps working through a denial of service against hosts, a
+home server that is switched off, and the setups of people who will never run
+one.
+
+It also does much of what a mailbox would for a returning device. Any of a
+person's devices can tell a device what it missed, so one that comes back needs
+a way in and nothing more.
+
+Tested with simulated NATs and a device that was not a host: two devices behind
+NATs were introduced in 14 ms, stayed connected when it left, and when their
+NATs could not be punched it relayed between them.
+
+**Cost.** Hosts cannot go. A device with no session has to reach something that
+can receive a connection, and when every device of a person is behind a NAT and
+all their sessions have ended, only a host or a forwarded port will do. A helper
+sees that two of its own devices are talking, which it could tell anyway. A
+device can only relay within what its own uplink allows, and more messages pass
+between a person's devices.
+
+Other people's devices could help too, within a space they share, and devices
+could open their own ports. Both are in [later.md](later.md#help-beyond-your-own-devices).
+

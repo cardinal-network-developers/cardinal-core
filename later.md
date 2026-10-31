@@ -81,6 +81,20 @@ Three things would be new, and each adds to what exists:
   arrives late is worthless, so a transfer agreement adds a deadline, and a
   late segment is dropped, not retried.
 
+## Help beyond your own devices
+
+A person's own devices help each other ([D49](decisions.md)). Two more things
+could make hosts matter less still.
+
+- **Other members' devices.** Members who accepted a space are already entitled
+  to reach each other, so one could introduce two others, about that space
+  only. A helper would learn who is talking and from where, and relaying spends
+  someone else's bandwidth, so this needs a limit agreed the way storage is.
+- **Asking the router.** A device could open its own port with UPnP, NAT-PMP or
+  PCP, which would make an ordinary device reachable with nobody setting
+  anything up, and so close most of what is left of the need for a host. Not
+  every router allows it, and it needs testing on real ones.
+
 ## Post-quantum signatures
 
 When forging Ed25519 becomes plausible, a new suite adds ML-DSA or SLH-DSA
