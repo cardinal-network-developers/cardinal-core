@@ -50,7 +50,7 @@ the common case, and needs no other party.
 
 Each member of a space SHOULD publish a **reach node** in that space
 ([profiles.md](profiles.md#reach)). It lists the member's hosts (endpoints
-and host link key) and a **delivery token** for each host, issued for that
+and static key) and a **delivery token** for each host, issued for that
 space. The reach node is part of the space, so it is encrypted to the other
 members, merges like any other state, and is withdrawn by the same means.
 

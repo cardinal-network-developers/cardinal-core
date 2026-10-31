@@ -180,6 +180,9 @@ about this space:
 
 | Field | Value |
 |---|---|
-| 1 | list of `{1: endpoints, 2: host link key, 3: delivery token}`, one per host |
+| 1 | list of `{1: endpoints, 2: host static X25519 key, 3: delivery token}`, one per host |
 
 Tokens in a reach node are valid only for this space ([hosts.md](hosts.md#delivery-tokens)).
+A reach node names a host by its X25519 key alone, as an invitation does, so that
+it fits in an [envelope](hosts.md#envelopes): an ML-KEM key would not. What such
+a session carries is end to end anyway, and its post-quantum rekey covers the rest.
