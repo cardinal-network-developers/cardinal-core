@@ -86,7 +86,11 @@ inviter's own.
    the inviter's software instead holds the request until its person
    accepts it, and creates the space only then. Until then, nothing the
    requester sends reaches the person except the request itself.
-5. Each device asks its person for a petname, offering the other's suggested
+5. Each device whose person has a host writes its [reach node](profiles.md#reach)
+   in the space, and the two reconcile the space. This session may be the only
+   one they ever have: someone [through hosts only](#who-a-person-knows) has no
+   other way to learn where to reach the other.
+6. Each device asks its person for a petname, offering the other's suggested
    name, and records the contact in the account space. Then `done`.
 
 ### When the inviter is offline
@@ -105,7 +109,7 @@ The inviter's device collects it later and reaches the invitee through the
 invitee's host, with that token, exactly as in step 1. It then runs the
 handshake as initiator, with the same invitation secret, and the invitee's
 device accepts it because the secret matches the invitation it used. Steps 3
-to 5 proceed.
+to 6 proceed.
 
 ## Pairing
 
@@ -154,7 +158,7 @@ Then:
   can open every earlier encryption key, and so the account space and every
   other space, and begins to sync. No space needs to
   change, because spaces belong to identities.
-- **Meeting a person.** Steps 3 to 5 of [Accepting](#accepting).
+- **Meeting a person.** Steps 3 to 6 of [Accepting](#accepting).
 
 ## Introductions
 
