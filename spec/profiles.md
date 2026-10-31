@@ -40,7 +40,7 @@ with anyone else.
 
 | Kind | Name | Fields |
 |---|---|---|
-| 1 | contact | 1: identity id; 2: petname; 3: relationship space id; 4: notes; 5: is a guardian; 6: accept introductions from (bool); 7: trusted (bool) |
+| 1 | contact | 1: identity id; 2: petname; 3: relationship space id; 4: notes; 5: is a guardian; 6: accept introductions from (bool, true if absent); 7: trusted (bool, false if absent); 8: refused (bool) |
 | 2 | space | 1: space id; 2: local name |
 | 3 | host | 1: grant (signed object bytes) |
 | 4 | device | 1: device key; 2: name; 3: is always on; 4: is a host for this identity |
@@ -51,7 +51,7 @@ with anyone else.
 | 9 | token | under a host node: 1: token; 2: space id; 3: revoked (bool) |
 | 10 | invitation | 1: invitation record; 2: cancelled (bool) |
 | 11 | invitation use | under an invitation node: 1: identity id that used it |
-| 12 | member seen | 1: identity id; 2: the name it gave itself; 3: the space it was seen in; 4: accept introductions from (bool) |
+| 12 | member seen | 1: identity id; 2: the name it gave itself; 3: the space it was seen in; 4: accept introductions from (bool, true if absent); 5: refused (bool) |
 
 Anything a person's devices may add to concurrently is a node of its own,
 never an item in a list field, so concurrent additions merge instead of

@@ -1172,6 +1172,16 @@ Holding a space already makes a member a carrier
 ([D48](#d48-every-device-carries-the-news)), so a member connected to two
 others passes their entries between them with no relay and no new message.
 
+**Refuse** is the one setting stronger than these, for someone a person wants
+nothing to do with: no session by any route, tokens revoked, no introductions,
+hidden, and a warning if someone adds them to a space with this person. An
+identity takes years to build, so being refused puts a real cost on spam and
+scams. It is as private as every level here. A refusal is never sent, and the
+protocol offers no way to share one: a shared list is a way for people to punish
+each other, and that is no job for a protocol. Blocking someone in one place
+needs nothing new, because membership already does it, by `remove_member`,
+unfollowing, leaving or muting, and that leaves the relationship alone.
+
 **Cost.** A space no longer holds together by random choice. In D48's simulation
 3 sessions each reached as little as 0.2%, and whom people trust is less even
 than that, so a group of two circles with nobody trusted in both can split until

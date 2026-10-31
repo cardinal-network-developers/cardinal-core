@@ -92,6 +92,13 @@ ordinary device reachable with nobody setting anything up, and so close most of
 what is left of the need for a host. Not every router allows it, and it needs
 testing on real ones.
 
+A router could also be a small host itself, as a package for pfSense or OpenWrt
+to begin with. It already has the public address, so it needs no forwarded port,
+and two friends' routers could be each other's way in. It is safe to leave
+listening because it answers no stranger: rejecting one costs a single keyed hash
+([link.md](spec/link.md#silence-and-cookies)), which hardware could do on the
+port.
+
 ## Post-quantum signatures
 
 When forging Ed25519 becomes plausible, a new suite adds ML-DSA or SLH-DSA

@@ -224,6 +224,12 @@ reflected in the cryptography.
   application that passes things along over several hops stops at them. What
   they write themselves still arrives. It limits the damage someone can do by
   being careless without ending the relationship.
+- **Refuse** can be set on any identity too, for someone a person wants nothing
+  to do with: no session by any route, any token they hold revoked, no
+  introductions, and hidden wherever software lists people. Software MUST warn
+  the person if someone adds a refused identity to a space with them. A refusal
+  is never sent and cannot be shared, and it cannot take back what was already
+  shared. Taking it away shows the person as they were before.
 - **All three are remembered**, because impersonation matters in all three. An
   identity is held to its id from the first time it is seen. A contact has the
   petname the person gave it. A member has the name it gave itself, shown as
