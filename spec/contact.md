@@ -187,6 +187,56 @@ field, published in the person's public space
 example ten deposits per day. When the door is full, it is full. If it
 attracts abuse, the owner replaces it. The bound is the owner's choice.
 
+## Who a person knows
+
+A person knows others in three ways, and software keeps which for every
+identity it has seen:
+
+| Who | What the person means | Direct sessions |
+|---|---|---|
+| **Trusted contact** | I know who this is, and I trust them with information about me | yes, if they also trust me |
+| **Contact** | I know who this is, and I do not trust them with information about me | no |
+| **Member** | I have been told who this is, as a member of a space we share, and have no other basis | no |
+
+Knowing is meant in the weak sense. Years of dealing with a pseudonym is
+knowing that identity, whoever is behind it, and it is how trust in an agent
+develops too. A person can be right or wrong to trust someone, and no protocol
+can fix that. It can only make it easy for the trust in a person's mind to be
+reflected in the cryptography.
+
+- **A person's own.** Nobody else sees which of these someone is to them, and
+  it is never sent. It is kept in the account space
+  ([profiles.md](profiles.md#account)), and it runs one way: each person
+  decides for themselves.
+- **A connection takes both.** A device opens link sessions only with the
+  person's own devices, their hosts, and trusted contacts. It answers any other
+  initiation as it answers a stranger's, with silence, so nobody can tell being
+  untrusted from a device being off. The session an invitation opens is the one
+  exception, and it ends with `done` unless each trusts the other.
+- **How someone was added sets where they start.** An invitation or an
+  introduction makes a trusted contact, because ordinary people mostly connect
+  to other ordinary people. Either side can choose **through hosts only** when
+  sending or answering one, which makes a contact instead. Someone who comes in
+  by a [front door](#front-door) starts as a contact.
+- **No introductions** can be set on any identity, whatever else it is: nothing
+  reaches this person through them. They cannot introduce anyone, they do not
+  [help two devices meet](hosts.md#help-from-a-persons-own-devices), and an
+  application that passes things along over several hops stops at them. What
+  they write themselves still arrives. It limits the damage someone can do by
+  being careless without ending the relationship.
+- **All three are remembered**, because impersonation matters in all three. An
+  identity is held to its id from the first time it is seen. A contact has the
+  petname the person gave it. A member has the name it gave itself, shown as
+  that, and the space it was seen in. Software MUST warn when a name matches
+  another identity it remembers.
+- **People can move between them.** A member becomes a contact by invitation or
+  introduction, and a person can change how they regard anyone at any time. None
+  of this touches keys.
+
+Where the trust between two people is not enough for robust communication,
+they can get better guarantees, with hosts, or build more trust and become
+mutuals. [D50](../decisions.md) has the reasons.
+
 ## Following
 
 Reading someone's public space needs no relationship: the reader pulls, and

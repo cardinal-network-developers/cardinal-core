@@ -366,17 +366,20 @@ rules below do not apply to it, in either direction. The adder delivers the
 offer through a relationship it already has with that identity; with no
 relationship, the offer never arrives.
 
-**Members who accepted are entitled to reach each other.** Sharing a space
-is consent given by whoever added the member and by the member who accepted,
-so, among accepted members:
+**Sharing a space does not open a connection.** Sharing it is consent given by
+whoever added the member and by the member who accepted, but it says nothing
+about whom a person trusts ([contact.md](contact.md#who-a-person-knows)). So,
+among accepted members:
 
-- a device MAY open link sessions with devices of every identity that is a
-  member of a space it holds, for that space's sync, blobs, and ephemeral
-  messages;
+- a device MAY open a link session directly only with a trusted contact who
+  trusts it back, and that session may carry any set both are entitled to;
+- other members reach each other through hosts, using each member's reach node
+  ([profiles.md](profiles.md#reach)), which gives the others a delivery token
+  for this space, or through a member connected to both, which holds the space
+  and so [passes on](sync.md#notices) what they write;
 - member devices reconcile the identity logs of all of the space's members,
-  so that authors can be checked and encryption key changes noticed;
-- each member's reach node ([profiles.md](profiles.md#reach)) gives the
-  others a delivery token for this space.
+  from whoever they are connected to, so that authors can be checked and
+  encryption key changes noticed.
 
-A device MUST NOT use a session opened through a shared space to name any
-other space, or to deliver anything about any other space.
+A device MUST NOT use a session reached with a delivery token to name any other
+space, or to deliver anything about any other space.

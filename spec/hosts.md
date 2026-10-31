@@ -158,20 +158,26 @@ other's address at the same moment. A host does that.
 | 2 | connect: `{0: 2, 1: token}` or `{0: 2, 2: device signing key}` | `{0: 2, 1: list of {1: static X25519 key, 2: observed address, 4: local addresses}}` | token holder, or owner device |
 | 3 | incoming: `{0: 3, 1: static X25519 key, 2: observed address, 3: token or absent, 4: local addresses}` | (none) | sent by the host to owner devices |
 | 4 | addresses: `{0: 4, 1: list of {1: device signing key, 2: list of endpoints}}` | (none) | between a person's own devices |
+| 5 | answer: `{0: 5, 1: static X25519 key, 2: agrees (bool)}` | (none) | owner device, to `incoming` |
 
 - On `connect`, the host sends `incoming` to each present owner device, with
-  the requester's static key and the address **the host observed**. Owner
-  devices accept an incoming connect if the token is active, or the requester
-  is the owner's own device. They may also apply their own rate limits.
+  the requester's static key, and the address **the host observed** only if
+  the requester is the owner's own device. An owner device agrees in `answer`
+  if the token is active and the requester is a device of a trusted contact who
+  [may reach it directly](contact.md#who-a-person-knows). It may also apply its
+  own rate limits. Anything but a yes within a second is a no.
 - The host replies with the static key and observed address of each owner
-  device that is present. Local addresses reported in `present` are passed
-  between devices of the same identity, and to a requester whose observed
-  address equals that owner device's, since they are then behind the same
-  router and already share a network.
+  device that agreed, or that is present if the requester is one of them, and
+  then sends the requester's address to those it named. A device says nothing
+  of whether another is online until that device has agreed. Local addresses
+  reported in `present` are passed between devices of the same identity, and to
+  a requester whose observed address equals that owner device's, since they are
+  then behind the same router and already share a network.
 - Both sides then send initiations to the addresses they were given. The
   first session to complete wins. If none completes within three seconds,
   the requester relays. When two devices are looking for each other, each is
-  a requester, and the one with the smaller static key relays.
+  a requester, and the one with the smaller static key relays. A requester
+  told of no device relays, which shows neither device's address to the other.
 - An observed address is present only if it is one a packet could be sent
   back to: a session over TCP has none, since its port says nothing about the
   device's UDP socket.
@@ -226,6 +232,15 @@ This cannot replace hosts altogether. A device with no session at all must
 reach something that can receive a connection, and a person's devices behind
 NATs cannot. That is what a host, or a device with a forwarded port, is still
 for.
+
+Trusted contacts can help each other too, as hosts: one grants the other
+`rendezvous` and `relay` with a small quota class, which gives consent, a limit
+and a way to end it. Such a helper introduces two identities only if both
+trust it, neither has set it to [no introductions](contact.md#who-a-person-knows),
+they share a space it is in, and both agree when asked. It names no
+space, and what the two send afterwards is end to end, so it learns of no other
+space they share. It does learn that they are talking, and a relay sees how
+much and when.
 
 ## Storage
 

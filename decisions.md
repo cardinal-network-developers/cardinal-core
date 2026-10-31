@@ -1120,6 +1120,66 @@ sees that two of its own devices are talking, which it could tell anyway. A
 device can only relay within what its own uplink allows, and more messages pass
 between a person's devices.
 
-Other people's devices could help too, within a space they share, and devices
-could open their own ports. Both are in [later.md](later.md#help-beyond-your-own-devices).
+Trusted contacts can help too ([D50](#d50-connections-follow-trust)), and devices
+could open their own ports ([later.md](later.md#help-beyond-your-own-devices)).
+
+---
+
+### D50. Connections follow trust
+
+**Choice.** A person knows others in three ways: trusted contacts, whom they
+know and trust with information about them; contacts, whom they know and do
+not; and members, whom they have only been told about, through a space they
+share ([contact.md](spec/contact.md#who-a-person-knows)). All three are
+remembered. A device opens link sessions only with its own devices, its hosts,
+and trusted contacts who trust it back, and a session between those may carry
+any set both are entitled to. Everyone else is reached through a host, or
+through a member connected to both.
+
+**Replaces.** The rule that accepted members may connect to each other
+directly; neighbours chosen at random among all members, now among trusted
+contacts who are members; the limit of a session to one space, which now applies
+only to a session reached with a token; and a host telling a requester who is
+online and where before the device concerned agrees.
+
+**Why.** A direct session shows each side the other's address. In a space of 200
+people, the old rule gave a home address to all of them, which is more than the
+first line of `contact.md` promises, and more than a shared interest should
+cost. D44's reasoning applies: what is not revealed cannot be used against
+someone. Between trusted contacts it costs nothing: naming a space both hold
+reveals nothing to either, so one session can serve them all.
+
+Knowing someone here is meant in the weak sense. Years of experience of a
+pseudonym is knowledge of that identity, whoever is behind it, and trust in
+agents will develop the same way. A person can be right or wrong in trusting
+someone, and a protocol cannot fix that. It can only make it easy for the trust
+in a person's mind to be reflected in the cryptography. So the levels are each
+person's own, run one way, and are never sent. A device that does not trust
+another answers it with the same silence it gives a stranger, so nobody can tell
+how they are regarded. Members are remembered as well as contacts, since
+impersonation matters even when there is no trust.
+
+Invitations and introductions make trusted contacts, because ordinary people
+mostly connect to other ordinary people, and it is only sometimes that a relative
+is a scoundrel or an idiot. Both can do damage, and you still want to be
+connected to them. So either side can choose **through hosts only** when sending
+or answering an invitation, and **no introductions** can be set on any identity
+at any level. The second stops what comes through someone without stopping what
+they say: a friend's friend who keeps connecting with scammers can still be
+read, while the scams stop there.
+
+Holding a space already makes a member a carrier
+([D48](#d48-every-device-carries-the-news)), so a member connected to two
+others passes their entries between them with no relay and no new message.
+
+**Cost.** A space no longer holds together by random choice. In D48's simulation
+3 sessions each reached as little as 0.2%, and whom people trust is less even
+than that, so a group of two circles with nobody trusted in both can split until
+a host joins them. Large groups will depend on hosts, against the aim of needing
+them less, and a household, where everyone is a mutual, will not. This is taken
+on purpose: where the trust between people is not enough for robust
+communication, they can get better guarantees, with hosts, or build more trust
+and become mutuals. Trust by default will sometimes be misplaced, and a person
+has to say so when it is. Being moved down can be noticed if someone watches for
+it.
 

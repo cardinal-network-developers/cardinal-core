@@ -188,10 +188,17 @@ hosts do not pass news on: they hold what owners give them.
 
 A device does not need a session with every holder of a set. It SHOULD keep
 sessions with its own devices and, in a space with many members, with about
-six other member devices, chosen at random and replaced from time to time.
-Random choice is what holds a space together: with sessions like these, news
-reaches nearly every device in a few hops, even when a fifth of them are
-silent ([D48](../decisions.md#d48-every-device-carries-the-news)).
+six devices of trusted contacts who are members
+([contact.md](contact.md#who-a-person-knows)), chosen at random and replaced
+from time to time. Random choice is what holds a space together: with sessions
+like these, news reaches nearly every device in a few hops, even when a fifth
+of them are silent ([D48](../decisions.md#d48-every-device-carries-the-news)).
+
+Who trusts whom is not random, and a space whose members form circles with
+nobody trusted in two of them can split. A host joins them
+([D50](../decisions.md)), and a device SHOULD keep a session with a host of
+such a space. Software SHOULD show a person when part of a space can be reached
+only through a host.
 
 ### Members who are offline
 
