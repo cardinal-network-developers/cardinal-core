@@ -253,8 +253,10 @@ logs, which are not secret and which it evaluates.
 
 Sets are reconciled, fetched, and filled with the ordinary
 [sync service](sync.md): owner devices for any label, token holders for
-labels allowed to their token, and anyone for public labels. Only owner
-devices may send `objects`. The storage service manages the sets:
+labels allowed to their token and for the owner's identity log, and anyone for
+public labels. Without that log, a holder could not judge what the owner's
+devices write, and two people with only tokens between them have no other way
+to get it. Only owner devices may send `objects`. The storage service manages the sets:
 
 | Op | Request | Reply | Who |
 |---|---|---|---|
