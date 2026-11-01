@@ -85,14 +85,19 @@ inviter's own.
    session silently if not. An invitation is a secret that anyone holding it
    can use, and it says nothing about who that is.
 
-   An invitation session MUST reach nothing but these two logs, reading its
-   own side's and taking the other's, and the relationship space of step 4
-   once that exists. It reaches no space by what the peer claims, whether the
-   claim names the inviter, a contact, or anyone else, and it ends silently if
-   the claimed identity is [refused](#who-a-person-knows).
+   An invitation session MUST reach nothing but the responding side's own log
+   for reading, and the relationship space of step 4 once that exists. Each
+   side fetches the other's log itself and takes nothing the other pushes. The
+   session reaches no space by what the peer claims, whether the claim names
+   the inviter, a contact, or anyone else, and it ends silently if the claimed
+   identity is [refused](#who-a-person-knows), or is already a contact. A
+   session carries one exchange, however many streams ask for one.
 4. The inviter's device creates the relationship space, with a genesis entry
    adding both identities as owners, wrapped for both encryption keys, and
-   sends it as `genesis`. If the invitation is a [front door](#front-door),
+   sends it as `genesis`. The invitee MUST check what it was sent before
+   keeping it: the relationship profile, the inviter as owner, exactly these
+   two identities as members, and a space it does not already hold. Anyone can
+   seal a genesis to a public key. If the invitation is a [front door](#front-door),
    the inviter's software instead holds the request until its person
    accepts it, and creates the space only then. Until then, nothing the
    requester sends reaches the person except the request itself.
