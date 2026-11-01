@@ -79,7 +79,17 @@ inviter's own.
 3. The invitee sends `device proof` ([link.md](link.md#identity-binding)) if
    it has an identity, and `hello`. If the invitation has a `for` field, the
    inviter checks that the proven identity matches it. Both sides reconcile
-   each other's identity logs.
+   each other's identity logs. Neither side held the other's log when the
+   proof arrived, so the identity in it is only a claim: each side MUST then
+   check that the other's device is a current device in that log, and end the
+   session silently if not. An invitation is a secret that anyone holding it
+   can use, and it says nothing about who that is.
+
+   An invitation session MUST reach nothing but these two logs, reading its
+   own side's and taking the other's, and the relationship space of step 4
+   once that exists. It reaches no space by what the peer claims, whether the
+   claim names the inviter, a contact, or anyone else, and it ends silently if
+   the claimed identity is [refused](#who-a-person-knows).
 4. The inviter's device creates the relationship space, with a genesis entry
    adding both identities as owners, wrapped for both encryption keys, and
    sends it as `genesis`. If the invitation is a [front door](#front-door),
